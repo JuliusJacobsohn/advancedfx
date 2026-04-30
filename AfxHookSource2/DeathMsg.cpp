@@ -25,6 +25,8 @@
 #include <set>
 #include <algorithm>
 #include <vector>
+#include <map>
+#include <sstream>
 
 // TODO: move panorama stuff out after addresses.cpp is done
 // decompose/change myPanoramaWrapper too
@@ -36,6 +38,9 @@ void* g_CStylePropertyOpacity_vtable = 0;
 
 typedef void(__fastcall *g_CPanelStyleSetStyleProperty_t)(void* This, void* property, bool transition);
 g_CPanelStyleSetStyleProperty_t g_CPanelStyleSetStyleProperty = nullptr;
+
+typedef void(__fastcall *g_CUIEngine_RunScript_t)(u_char* thisptr, u_char* contextPanel, const char* scriptSource, const char* originFile, uint64_t line);
+g_CUIEngine_RunScript_t g_CUIEngine_RunScript = nullptr;
 
 struct CPanel2D {
 	const char* getClassName() {
@@ -486,6 +491,36 @@ struct myPanoramaWrapper {
 		spawnTimeSymbol = makeSymbol(*pUIEngine, 0, "SpawnTime");
 	};
 
+	bool runScript(u_char* contextPanel, const char* scriptSource) {
+		if (nullptr == pUIEngine || nullptr == *pUIEngine) {
+			advancedfx::Warning("pUIEngine is null\n");
+			return false;
+		}
+
+		if (nullptr == contextPanel) {
+			advancedfx::Warning("Panorama script context panel is null\n");
+			return false;
+		}
+
+		if (nullptr == g_CUIEngine_RunScript) {
+			advancedfx::Warning("Panorama RunScript address is not available yet.\n");
+			return false;
+		}
+
+		// Non-zero line bypasses CS2's Panorama script cache for repeated generated snippets.
+		g_CUIEngine_RunScript(*pUIEngine, contextPanel, scriptSource, "", 1);
+		return true;
+	}
+
+	u_char* getHudPanel() {
+		if (nullptr == pHudPanel) {
+			advancedfx::Warning("pHudPanel is null\n");
+			return nullptr;
+		}
+
+		return ((u_char***)pHudPanel)[0][1];
+	}
+
 	u_char* getDeathnotices(){
 		if (nullptr == pHudPanel){
 			advancedfx::Warning("pHudPanel is null\n");
@@ -538,7 +573,7 @@ struct myPanoramaWrapper {
 	}
 
 	void printChildren(const char* parentId) {
-		auto parentPanel = ((u_char***)pHudPanel)[0][1];
+		auto parentPanel = getHudPanel();
 		if (!parentPanel) return;
 
 		if (strlen(parentId) > 0) {
@@ -602,7 +637,7 @@ struct myPanoramaWrapper {
 
 		for (int i = 0; i < *(int*)children; ++i) {
 			const auto panel = ((u_char***)children)[1][i];
-			const auto panelFlags = (u_char)(panel + CS2::PanoramaUIPanel::panelFlags);
+			const auto panelFlags = *(u_char*)(panel + CS2::PanoramaUIPanel::panelFlags);
 			if ((panelFlags & CS2::PanoramaUIPanel::k_EPanelFlag_HasOwnLayoutFile) == 0) {
 				auto found = findChildrenInLayoutFileByClassName(panel, classNameToFind);
 				if (!found.empty()) {
@@ -633,7 +668,7 @@ struct myPanoramaWrapper {
 
 		for (int i = 0; i < *(int*)children; ++i) {
 			const auto panel = ((u_char***)children)[1][i];
-			const auto panelFlags = (u_char)(panel + CS2::PanoramaUIPanel::panelFlags);
+			const auto panelFlags = *(u_char*)(panel + CS2::PanoramaUIPanel::panelFlags);
 			if ((panelFlags & CS2::PanoramaUIPanel::k_EPanelFlag_HasOwnLayoutFile) == 0) {
 				if (const auto found = findChildInLayoutFile(panel, idToFind)) {
 					return found;
@@ -1362,6 +1397,14 @@ bool getPanoramaAddrs(HMODULE panoramaDll) {
 	}
 
 	{
+		g_CUIEngine_RunScript = (g_CUIEngine_RunScript_t)getAddress(panoramaDll, "48 89 5C 24 ?? 4C 89 4C 24 ?? 48 89 54 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D");
+		if (nullptr == g_CUIEngine_RunScript) {
+			ErrorBox(MkErrStr(__FILE__, __LINE__));
+			return false;
+		}
+	}
+
+	{
 		void **vtable = (void**)Afx::BinUtils::FindClassVtable(panoramaDll,".?AVCStylePropertyForegroundColor@panorama@@",0,0);
 		if(nullptr == vtable) {
 			ErrorBox(MkErrStr(__FILE__, __LINE__));	
@@ -1816,6 +1859,238 @@ CON_COMMAND(mirv_deathmsg, "controls death notification options")
 {
 	mirvDeathMsg_Console(args);
 };
+
+struct ScoreboardRankOverride {
+	std::string ratingType;
+	int score = 0;
+	int wins = 10;
+	bool use = false;
+};
+
+std::map<uint64_t, ScoreboardRankOverride> g_ScoreboardRankOverrides;
+
+bool parseXuidArg(const char* arg, uint64_t& outXuid) {
+	if (nullptr == arg || arg[0] == '\0') return false;
+	outXuid = StringIBeginsWith(arg, "x") ? strtoull(arg + 1, nullptr, 10) : strtoull(arg, nullptr, 10);
+	return 0 != outXuid;
+}
+
+std::string jsEscapeSingleQuotedString(const std::string& value) {
+	std::string result;
+	result.reserve(value.size());
+
+	for (char c : value) {
+		switch (c) {
+		case '\\': result.append("\\\\"); break;
+		case '\'': result.append("\\'"); break;
+		case '\n': result.append("\\n"); break;
+		case '\r': result.append("\\r"); break;
+		default: result.push_back(c); break;
+		}
+	}
+
+	return result;
+}
+
+u_char* findScoreboardPanel() {
+	auto hudPanel = g_myPanoramaWrapper.getHudPanel();
+	if (!hudPanel) return nullptr;
+
+	if (auto scoreboard = g_myPanoramaWrapper.findChildInLayoutFile(hudPanel, "Scoreboard")) {
+		return scoreboard;
+	}
+
+	auto scoreboards = g_myPanoramaWrapper.findChildrenInLayoutFileByClassName(hudPanel, "CSGOScoreboard");
+	if (!scoreboards.empty()) {
+		return scoreboards[0];
+	}
+
+	return hudPanel;
+}
+
+bool applyScoreboardRankOverrides() {
+	auto contextPanel = findScoreboardPanel();
+	if (!contextPanel) return false;
+
+	std::ostringstream script;
+	script
+		<< "(function(){"
+		<< "var root=$('#Scoreboard')||$.GetContextPanel();"
+		<< "if(!root||!root.IsValid||!root.IsValid())return;"
+		<< "var data={";
+
+	bool first = true;
+	for (const auto& entry : g_ScoreboardRankOverrides) {
+		if (!entry.second.use) continue;
+		if (!first) script << ",";
+		first = false;
+		script
+			<< "'" << entry.first << "':{"
+			<< "ratingType:'" << jsEscapeSingleQuotedString(entry.second.ratingType) << "',"
+			<< "score:" << entry.second.score << ","
+			<< "wins:" << entry.second.wins
+			<< "}";
+	}
+
+	script
+		<< "};"
+		<< "root.Data().mirvScoreboardRankOverrides=data;"
+		<< "var apply=function(){"
+		<< "var root=$('#Scoreboard')||$.GetContextPanel();"
+		<< "if(!root||!root.IsValid||!root.IsValid()||typeof RatingEmblem==='undefined')return;"
+		<< "var overrides=root.Data().mirvScoreboardRankOverrides||{};"
+		<< "for(var xuid in overrides){"
+		<< "var o=overrides[xuid];"
+		<< "var row=root.FindChildTraverse?root.FindChildTraverse('player-'+xuid):null;"
+		<< "if(!row||!row.IsValid())continue;"
+		<< "var emblem=row.FindChildTraverse('jsRatingEmblem');"
+		<< "if(!emblem||!emblem.IsValid())continue;"
+		<< "emblem.visible=true;"
+		<< "RatingEmblem.SetXuid({root_panel:emblem,full_details:false,rating_type:o.ratingType,leaderboard_details:{score:o.score,matchesWon:o.wins},local_player:false});"
+		<< "}"
+		<< "};"
+		<< "root.Data().mirvScoreboardRankApply=apply;"
+		<< "if(!root.Data().mirvScoreboardRankHooked){"
+		<< "root.Data().mirvScoreboardRankHooked=true;"
+		<< "$.RegisterEventHandler('Scoreboard_UpdateJob',root,function(){$.Schedule(0.0,function(){var r=$('#Scoreboard')||root;if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvScoreboardRankApply)r.Data().mirvScoreboardRankApply();});});"
+		<< "$.RegisterEventHandler('OnOpenScoreboard',root,function(){$.Schedule(0.05,function(){var r=$('#Scoreboard')||root;if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvScoreboardRankApply)r.Data().mirvScoreboardRankApply();});});"
+		<< "}"
+		<< "apply();"
+		<< "})();";
+
+	return g_myPanoramaWrapper.runScript(contextPanel, script.str().c_str());
+}
+
+bool parseScoreboardRankMode(const char* arg, std::string& outRatingType) {
+	if (0 == _stricmp("premier", arg) || 0 == _stricmp("premiere", arg)) {
+		outRatingType = "Premier";
+		return true;
+	}
+	if (0 == _stricmp("competitive", arg) || 0 == _stricmp("comp", arg)) {
+		outRatingType = "Competitive";
+		return true;
+	}
+	if (0 == _stricmp("wingman", arg)) {
+		outRatingType = "Wingman";
+		return true;
+	}
+
+	return false;
+}
+
+void mirvScoreboardRank_PrintHelp(const char* arg0) {
+	advancedfx::Message(
+		"%s byXuid add x<ullXuid> premier <rating> [wins <iWins>]\n"
+		"%s byXuid add x<ullXuid> competitive|comp <rank 1-18> [wins <iWins>]\n"
+		"%s byXuid add x<ullXuid> wingman <rank 1-18> [wins <iWins>]\n"
+		"%s byXuid remove x<ullXuid>\n"
+		"%s clear\n"
+		"%s print\n"
+		"%s apply - Re-apply current overrides to the open scoreboard.\n"
+		"Notes:\n"
+		"\tThis is a visual Panorama scoreboard override for demo playback / recording.\n"
+		"\tCS2 may rebuild scoreboard rows; use %s apply or mirv_cmd scheduling if needed.\n"
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+	);
+}
+
+CON_COMMAND(mirv_scoreboard_rank, "Visually overrides scoreboard rank / Premier rating panels.")
+{
+	const auto arg0 = args->ArgV(0);
+	const auto argc = args->ArgC();
+
+	if (2 <= argc) {
+		const auto arg1 = args->ArgV(1);
+
+		if (0 == _stricmp("byXuid", arg1)) {
+			if (3 <= argc) {
+				const auto arg2 = args->ArgV(2);
+
+				if (0 == _stricmp("add", arg2)) {
+					if (6 <= argc) {
+						uint64_t xuid = 0;
+						if (!parseXuidArg(args->ArgV(3), xuid)) {
+							advancedfx::Warning("Invalid XUID: %s\n", args->ArgV(3));
+							return;
+						}
+
+						ScoreboardRankOverride entry;
+						if (!parseScoreboardRankMode(args->ArgV(4), entry.ratingType)) {
+							advancedfx::Warning("Invalid rank type: %s\n", args->ArgV(4));
+							return;
+						}
+
+						entry.score = atoi(args->ArgV(5));
+						entry.wins = 10;
+						entry.use = true;
+
+						for (int i = 6; i + 1 < argc; ++i) {
+							if (0 == _stricmp("wins", args->ArgV(i))) {
+								entry.wins = atoi(args->ArgV(i + 1));
+								++i;
+							}
+						}
+
+						if (entry.score < 0) {
+							advancedfx::Warning("Rank / rating must be >= 0.\n");
+							return;
+						}
+
+						if ((entry.ratingType == "Competitive" || entry.ratingType == "Wingman") && 18 < entry.score) {
+							advancedfx::Warning("Competitive and Wingman rank image ids are expected to be 0..18.\n");
+						}
+
+						g_ScoreboardRankOverrides[xuid] = entry;
+						applyScoreboardRankOverrides();
+						return;
+					}
+				}
+				else if (0 == _stricmp("remove", arg2)) {
+					if (4 <= argc) {
+						uint64_t xuid = 0;
+						if (!parseXuidArg(args->ArgV(3), xuid)) {
+							advancedfx::Warning("Invalid XUID: %s\n", args->ArgV(3));
+							return;
+						}
+						g_ScoreboardRankOverrides.erase(xuid);
+						applyScoreboardRankOverrides();
+						return;
+					}
+				}
+			}
+
+			mirvScoreboardRank_PrintHelp(arg0);
+			return;
+		}
+
+		if (0 == _stricmp("clear", arg1)) {
+			g_ScoreboardRankOverrides.clear();
+			applyScoreboardRankOverrides();
+			return;
+		}
+
+		if (0 == _stricmp("print", arg1)) {
+			for (const auto& entry : g_ScoreboardRankOverrides) {
+				advancedfx::Message("x%llu %s %i wins %i\n", (unsigned long long)entry.first, entry.second.ratingType.c_str(), entry.second.score, entry.second.wins);
+			}
+			return;
+		}
+
+		if (0 == _stricmp("apply", arg1)) {
+			applyScoreboardRankOverrides();
+			return;
+		}
+	}
+
+	mirvScoreboardRank_PrintHelp(arg0);
+}
 
 enum panelMatchType {
 	ID = 0,
