@@ -18,7 +18,8 @@
 #include "Globals.h"
 #include "ClientEntitySystem.h"
 #include "SchemaSystem.h"
-#include "MirvColors.h" 
+#include "MirvColors.h"
+#include "ReplaceName.h"
 
 #include "addresses.h"
 
@@ -2579,6 +2580,15 @@ bool parseSyntheticChatOptions(advancedfx::ICommandArgs* args, int firstOption, 
 	return true;
 }
 
+const char* getSyntheticChatDisplayName(const PlayerInfo& player, int controllerIndex) {
+	const auto replacement = GetReplaceNameOverride(controllerIndex, player.xuid);
+	if (replacement) {
+		return replacement;
+	}
+
+	return player.name;
+}
+
 CON_COMMAND(mirv_chat_insert, "Insert synthetic chat into CS2's real HUD chat panel.")
 {
 	const auto arg0 = args->ArgV(0);
@@ -2616,7 +2626,7 @@ CON_COMMAND(mirv_chat_insert, "Insert synthetic chat into CS2's real HUD chat pa
 			PlayerInfo player;
 			int entityIndex = -1;
 			if (resolveSyntheticChatPlayerByXuid(xuid, player, &entityIndex) && player.name) {
-				entry.displayName = player.name;
+				entry.displayName = getSyntheticChatDisplayName(player, entityIndex);
 				entry.entityIndex = entityIndex;
 				entry.userId = player.userId;
 				entry.xuid = player.xuid;
@@ -2635,7 +2645,7 @@ CON_COMMAND(mirv_chat_insert, "Insert synthetic chat into CS2's real HUD chat pa
 			const int userId = atoi(args->ArgV(2));
 			auto player = getPlayerInfoFromControllerIndex(userId + 1);
 			if (player.name) {
-				entry.displayName = player.name;
+				entry.displayName = getSyntheticChatDisplayName(player, userId + 1);
 				entry.entityIndex = userId + 1;
 				entry.userId = player.userId;
 				entry.xuid = player.xuid;

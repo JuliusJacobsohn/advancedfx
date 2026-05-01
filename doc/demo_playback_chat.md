@@ -132,6 +132,7 @@ Implementation direction:
 Current implementation behavior:
 
 - `mirv_chat_insert` resolves the player name and controller entity index for `byXuid` / `byUserId`.
+- Player-targeted chat uses active `mirv_replace_name` overrides when present, so synthetic rows match renamed HUD/player UI output.
 - For `byXuid` / `byUserId`, omitted `team` and `alive` values are inferred from the current player controller / pawn when possible. Use explicit `team=` / `alive=` to override the inferred state for staged conversations.
 - It selects `Cstrike_Chat_All`, `Cstrike_Chat_AllDead`, `Cstrike_Chat_AllSpec`, `Cstrike_Chat_CT`, `Cstrike_Chat_T`, `Cstrike_Chat_CT_Loc`, `Cstrike_Chat_T_Loc`, `Cstrike_Chat_CT_Dead`, `Cstrike_Chat_T_Dead`, or `Cstrike_Chat_Spec` from `visibility`, `team`, `alive`, and `location`.
 - It allocates native message id `118` / partial name `SayText2`, builds a normal protobuf SayText2 payload, and parses that payload into the CS2-allocated `CUserMessageSayText2` object through `MessageLite::ParseFromArray`.
