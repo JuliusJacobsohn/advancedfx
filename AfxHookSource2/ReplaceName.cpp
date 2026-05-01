@@ -23,6 +23,24 @@ std::map<uint64_t,std::string> g_SteamId_To_ReplaceName;
 std::map<int,std::string> g_Index_To_DecoratedReplaceName;
 std::map<uint64_t,std::string> g_SteamId_To_DecoratedReplaceName;
 
+const char* GetReplaceNameOverride(int controllerIndex, uint64_t steamId) {
+    if (!g_Index_To_ReplaceName.empty()) {
+        auto it = g_Index_To_ReplaceName.find(controllerIndex);
+        if (it != g_Index_To_ReplaceName.end()) {
+            return it->second.c_str();
+        }
+    }
+
+    if (!g_SteamId_To_ReplaceName.empty()) {
+        auto it = g_SteamId_To_ReplaceName.find(steamId);
+        if (it != g_SteamId_To_ReplaceName.end()) {
+            return it->second.c_str();
+        }
+    }
+
+    return nullptr;
+}
+
 typedef const char * (__fastcall * CCSPlayerController_GetPlayerName_t)(void * This);
 CCSPlayerController_GetPlayerName_t g_Org_CCSPlayerController_GetPlayerName = nullptr;
 
@@ -34,22 +52,10 @@ const char * __fastcall New_CCSPlayerController_GetPlayerName(CEntityInstance * 
 		advancedfx::Message("GetPlayerName: %i -> %s\n", handle.GetEntryIndex(),result);
     }
 
-    if(!g_Index_To_ReplaceName.empty()){
-		auto handle = This->GetHandle();
-		if (handle.IsValid()) {
-			auto it = g_Index_To_ReplaceName.find(handle.GetEntryIndex());
-			if(it != g_Index_To_ReplaceName.end()) {
-				result = it->second.c_str();
-			}
-		}
-    }
-
-    if(!g_SteamId_To_ReplaceName.empty()) {
-        uint64_t steamid = This->GetSteamId();
-        auto it = g_SteamId_To_ReplaceName.find(steamid);
-        if(it!=g_SteamId_To_ReplaceName.end()) {
-			result = it->second.c_str();
-        }
+    auto handle = This->GetHandle();
+    const auto replacement = GetReplaceNameOverride(handle.IsValid() ? handle.GetEntryIndex() : -1, This->GetSteamId());
+    if (replacement) {
+        result = replacement;
     }
 
     return result;
