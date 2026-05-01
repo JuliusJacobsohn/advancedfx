@@ -163,6 +163,24 @@ Native binary research findings:
 - The first native user-message prototype used public SDK virtual-table assumptions for `INetworkMessages` and `IGameEventSystem`. That was not safe in-process for this CS2 build: probing the path in `inspect` and sending through it both crashed the game. The retained fix is to avoid protobuf ABI casts and use the current Windows gamedata slot numbers for `IGameEventSystem`.
 - The `player_chat` event backend was not a safe path; insertion crashed CS2. The likely robust path remains the actual client handler for `CUserMessageSayText2` / `CCSGO_HudChat`.
 
+Handler byte-pattern repair guide:
+
+- First run `mirv_chat_insert inspect`. If `networkMessages` and `sayText2` resolve but `handler=0000000000000000`, the protobuf allocation path is still intact and only the native HUD handler signature likely broke.
+- The current signature is in `ChatNative::getSayText2Handler()` in `AfxHookSource2/DeathMsg.cpp`. It scans `client.dll` for the SayText2 handler function prologue and nearby field reads:
+
+```text
+48 89 4C 24 08 55 41 56 48 8D AC 24 ?? ?? ?? ??
+48 81 EC ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 4C 8B F2
+48 8B 01 FF 90 50 01 00 00 84 C0 74 ?? E8 ?? ?? ?? ??
+80 78 72 00 0F 85 ?? ?? ?? ?? 41 8B 46 74 48 89 B4 24 ?? ?? ?? ??
+```
+
+- The string search trail that led to this handler was: `CUserMessageSayText2`, `CUserMessageSayText2_t`, `CS_UM_SayText2`, `CCSGO_HudChat`, and `Cstrike_Chat_*`. The `CUserMessageSayText2` strings mostly lead to registration/type metadata; the useful runtime path is around the `CCSGO_HudChat` / `CHudChatDelegate` code that formats and appends rows.
+- In a disassembler, validate any replacement candidate before changing the pattern. The correct function takes the chat delegate/context in `rcx` and the native `CNetMessage*` in `rdx`; early in the function it preserves `rdx` in `r14`, calls `CNetMessage::AsProto()` / equivalent, reads the SayText2 string fields, checks the chat boolean, reads entity index, and then calls the helper that ultimately appends to `CCSGO_HudChat`.
+- Useful validation anchors from the tested build: the handler start was RVA `0x10c4150`, the nearby formatting helpers were around RVAs `0x10c0fe0` and `0x10c10f0`, and the object reads matched `CNetMessagePB<CUserMessageSayText2>` offsets `0x48` through `0x74`.
+- Do not patch by hard-coding those RVAs. They are only orientation markers for the tested client build. Use them to recognize the same code shape after a Valve update, then update the byte pattern with wildcards around calls, RIP-relative globals, stack frame sizes, and conditional jump displacements.
+- After updating the signature, test with an early scheduled all/team conversation and a delayed `quit`, then verify the console has `filled SayText2 protobuf object via MessageLite parse`, `native SayText2 handler returned`, and `deallocated SayText2 message` for every inserted row.
+
 Latest verified test:
 
 ```text
