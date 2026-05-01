@@ -2095,7 +2095,7 @@ CON_COMMAND(mirv_scoreboard_rank, "Visually overrides scoreboard rank / Premier 
 
 struct SyntheticChatMessage {
 	std::string displayName;
-	std::string team = "none";
+	std::string team = "auto";
 	std::string visibility = "all";
 	std::string location;
 	std::string message;
@@ -2103,6 +2103,8 @@ struct SyntheticChatMessage {
 	int userId = -1;
 	uint64_t xuid = 0;
 	bool alive = true;
+	bool teamSpecified = false;
+	bool aliveSpecified = false;
 };
 
 namespace ChatNative {
@@ -2343,6 +2345,75 @@ bool resolveSyntheticChatPlayerByXuid(uint64_t xuid, PlayerInfo& outPlayer, int*
 	return false;
 }
 
+bool inferSyntheticChatState(SyntheticChatMessage& entry) {
+	if (entry.entityIndex >= 0) {
+		if (auto controller = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, entry.entityIndex)) {
+			if (!entry.teamSpecified || 0 == _stricmp(entry.team.c_str(), "auto")) {
+				switch (controller->GetTeam()) {
+				case 2: entry.team = "T"; break;
+				case 3: entry.team = "CT"; break;
+				case 1: entry.team = "spec"; break;
+				default: entry.team = "none"; break;
+				}
+			}
+
+			if (!entry.aliveSpecified) {
+				entry.alive = false;
+				auto pawnHandle = controller->GetPlayerPawnHandle();
+				const auto pawnIndex = pawnHandle.GetEntryIndex();
+				if (pawnIndex >= 0) {
+					if (auto pawn = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, pawnIndex)) {
+						if (pawn->IsPlayerPawn()) {
+							entry.alive = 0 < pawn->GetHealth();
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (entry.team.empty() || 0 == _stricmp(entry.team.c_str(), "auto")) {
+		entry.team = "none";
+	}
+	else if (0 == _stricmp(entry.team.c_str(), "ct")) {
+		entry.team = "CT";
+	}
+	else if (0 == _stricmp(entry.team.c_str(), "t")) {
+		entry.team = "T";
+	}
+	else if (0 == _stricmp(entry.team.c_str(), "spec") || 0 == _stricmp(entry.team.c_str(), "spectator")) {
+		entry.team = "spec";
+	}
+	else if (0 == _stricmp(entry.team.c_str(), "none")) {
+		entry.team = "none";
+	}
+	else {
+		advancedfx::Warning("mirv_chat_insert: invalid team \"%s\". Use T, CT, spec, none, or auto.\n", entry.team.c_str());
+		return false;
+	}
+
+	if (entry.visibility.empty()) {
+		entry.visibility = "all";
+	}
+	else if (0 == _stricmp(entry.visibility.c_str(), "all")) {
+		entry.visibility = "all";
+	}
+	else if (0 == _stricmp(entry.visibility.c_str(), "team")) {
+		entry.visibility = "team";
+	}
+	else {
+		advancedfx::Warning("mirv_chat_insert: invalid visibility \"%s\". Use all or team.\n", entry.visibility.c_str());
+		return false;
+	}
+
+	if (0 == _stricmp(entry.visibility.c_str(), "team") && 0 == _stricmp(entry.team.c_str(), "none")) {
+		advancedfx::Warning("mirv_chat_insert: team chat needs a player-resolved or explicit team.\n");
+		return false;
+	}
+
+	return true;
+}
+
 bool applySyntheticChatMessage(const SyntheticChatMessage& entry) {
 	auto networkMessages = ChatNative::getNetworkMessages();
 
@@ -2454,9 +2525,9 @@ bool inspectNativeChatPath() {
 
 void mirvChatInsert_PrintHelp(const char* arg0) {
 	advancedfx::Message(
-		"%s byXuid x<ullXuid> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
-		"%s byUserId <iUserId> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
-		"%s name <displayName> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s byXuid x<ullXuid> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s byUserId <iUserId> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s name <displayName> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
 		"%s clear\n"
 		"%s inspect\n"
 		"Examples:\n"
@@ -2464,6 +2535,7 @@ void mirvChatInsert_PrintHelp(const char* arg0) {
 		"\tmirv_cmd addAtTick 12345 %s byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now\n"
 		"Notes:\n"
 		"\tThe command allocates native CUserMessageSayText2, fills the protobuf fields directly, then calls CS2's native SayText2 HUD handler.\n"
+		"\tFor byXuid / byUserId, team=auto and omitted alive infer state from the current player controller and pawn.\n"
 		"\tUse mirv_cmd addAtTick / addAtTime to schedule insertion during demo playback.\n"
 		, arg0
 		, arg0
@@ -2487,9 +2559,11 @@ bool parseSyntheticChatOptions(advancedfx::ICommandArgs* args, int firstOption, 
 		}
 		else if (StringIBeginsWith(arg, "team=")) {
 			entry.team = arg + strlen("team=");
+			entry.teamSpecified = true;
 		}
 		else if (StringIBeginsWith(arg, "alive=")) {
 			entry.alive = 0 != atoi(arg + strlen("alive="));
+			entry.aliveSpecified = true;
 		}
 		else if (StringIBeginsWith(arg, "visibility=")) {
 			entry.visibility = arg + strlen("visibility=");
@@ -2601,6 +2675,10 @@ CON_COMMAND(mirv_chat_insert, "Insert synthetic chat into CS2's real HUD chat pa
 		}
 
 		if (!parseSyntheticChatOptions(args, firstOption, entry)) {
+			return;
+		}
+
+		if (!inferSyntheticChatState(entry)) {
 			return;
 		}
 
