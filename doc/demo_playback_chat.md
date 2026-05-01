@@ -142,6 +142,17 @@ Current implementation behavior:
 - `mirv_chat_insert inspect` prints the located chat panel, exposed Panorama properties, native interface pointers, the current `CGameEventManager` pointer, and the resolved `SayText2` message type. It deliberately does not allocate or dispatch `CUserMessageSayText2`.
 - Recent inspect result found `CSGOHudChat` and `ChatHistoryText`, but only generic methods were exposed from Panorama: `RunScriptInPanelContext`, `SetCompositionLayerTextureName`, `SetTopOfInputContext`, and `UpdateFocusInContext`.
 
+Safer implementation evaluation:
+
+- The brittle part of the current working path is not the concept of a native `SayText2` message. The brittle part is writing the `CUserMessageSayText2` protobuf fields by hard-coded offsets and borrowing `std::string` storage across the CS2 / HLAE boundary.
+- CounterStrikeSharp's CS2 user-message wrapper shows the safer allocation and mutation pattern used by an active open source CS2 project: allocate through `INetworkMessageInternal::AllocateMessage()`, cast the returned object to `CNetMessagePB<google::protobuf::Message>`, then mutate fields through protobuf reflection by name (`messagename`, `param1`, `param2`, `param3`, `param4`, `chat`, `entityindex`).
+- The matching public Source 2 SDK layout confirms the same allocation rule: do not construct `CNetMessagePB` directly; allocate through the engine network-message interface, then treat the result as a `CNetMessagePB<ProtoClass>`.
+- That reflection path should remove the raw `SayText2ProtoView` offsets and let protobuf own the string fields normally, which is safer across Valve builds as long as the `SayText2` field names remain stable.
+- The integration blocker is protobuf ABI compatibility. SourceMod-family CS2 projects use the HL2SDK protobuf `3.21.8` headers and `libprotobuf.lib`. This repo currently fetches protobuf `v31.1` for other components, and earlier attempts to use HLAE's protobuf ABI against CS2-allocated protobuf objects crashed.
+- A production version should therefore add an isolated AfxHookSource2-only protobuf 3.21.8 / Source 2 SDK reflection helper, or otherwise call CS2's own protobuf reflection functions with the exact 3.21.8 ABI. It should not cast CS2 objects to the existing repo protobuf v31.1 types.
+- Estimated work: a focused prototype is roughly half a day to one day now that local launch and screenshot validation are automated. A clean integration that avoids conflicting protobuf versions in the CMake tree is closer to one to two days.
+- The handler lookup remains a separate risk. Even with reflection field mutation, the current implementation still finds and calls the native `CHudChatDelegate` SayText2 handler by byte pattern. The most robust final route would either locate that handler through engine registration / user-message dispatch metadata or find a stable `CCSGO_HudChat` append entry point.
+
 Native binary research findings:
 
 - `client.dll` contains `CS_UM_SayText2`, `CUserMessageSayText2_t`, and `CUserMessageSayText2` strings, but direct string xrefs found registration/type metadata rather than the runtime handler.
