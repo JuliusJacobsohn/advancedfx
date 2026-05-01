@@ -9,9 +9,9 @@ For the local test demo, use the known player names and XUIDs in [demo_playback_
 Target command shape:
 
 ```text
-mirv_chat_insert byXuid x<steamid64> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
-mirv_chat_insert byUserId <id> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
-mirv_chat_insert name <displayName> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
+mirv_chat_insert byXuid x<steamid64> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
+mirv_chat_insert byUserId <id> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
+mirv_chat_insert name <displayName> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
 mirv_chat_insert clear
 mirv_chat_insert inspect
 ```
@@ -63,6 +63,7 @@ Implementation direction:
 Current implementation behavior:
 
 - `mirv_chat_insert` resolves the player name and controller entity index for `byXuid` / `byUserId`.
+- For `byXuid` / `byUserId`, omitted `team` and `alive` values are inferred from the current player controller / pawn when possible. Use explicit `team=` / `alive=` to override the inferred state for staged conversations.
 - It selects `Cstrike_Chat_All`, `Cstrike_Chat_AllDead`, `Cstrike_Chat_AllSpec`, `Cstrike_Chat_CT`, `Cstrike_Chat_T`, `Cstrike_Chat_CT_Loc`, `Cstrike_Chat_T_Loc`, `Cstrike_Chat_CT_Dead`, `Cstrike_Chat_T_Dead`, or `Cstrike_Chat_Spec` from `visibility`, `team`, `alive`, and `location`.
 - It allocates native message id `118` / partial name `SayText2` and fills the CS2-allocated `CUserMessageSayText2` object directly. The direct layout comes from locally generated protobuf 3.21.8 code and matches the observed `0x78` allocation.
 - The parser-based paths remain documented as failed probes: raw protobuf wire data and the legacy byte/string `SayText2` stream both reached the parser but were rejected.
@@ -90,6 +91,19 @@ mirv_cmd addAtTick 310 demo_pause
 ```
 
 Result: CS2 rendered `[ALL] Benjamin Netanjahu: handler_all_probe` in the real closed chat feed. Team-only chat follows CS2's normal visibility filtering; when the camera was on a Terrorist player, a CT team message was not shown.
+
+Latest multi-message test:
+
+```text
+mirv_cmd addAtTick 300 mirv_chat_insert byXuid x76561198723801816 visibility=all message gl hf
+mirv_cmd addAtTick 304 mirv_chat_insert byXuid x76561198723801816 visibility=team location=T_Start message walk mid together
+mirv_cmd addAtTick 308 mirv_chat_insert byXuid x76561198772930198 visibility=team location=T_Start message flashing ramp
+mirv_cmd addAtTick 312 mirv_chat_insert byXuid x76561198721306201 visibility=all message banana is quiet
+mirv_cmd addAtTick 316 mirv_chat_insert byXuid x76561197962023477 visibility=all message rotating now
+mirv_cmd addAtTick 330 demo_pause
+```
+
+Result: all five lines rendered through CS2's native closed chat feed. The team messages used the T team-chat token with location (`T Start`) and the all-chat messages used the normal `[ALL]` token. Capture timing matters: when several rows are inserted within a short tick window, wait roughly 1.5-2.0 seconds after the final insertion before taking a still screenshot so the native chat row animation has completed.
 
 Useful chat token mapping to investigate:
 
