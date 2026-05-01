@@ -25,3 +25,4 @@ Shared repo building blocks:
 - Frame-stage reapply point: `ClientFrameStageNotify` around `FRAME_RENDER_PASS`.
 - Scheduled commands: `mirv_cmd addAtTick` / `mirv_cmd addAtTime`.
 - Panorama bridge patterns: current scoreboard-rank override and existing death-notice UI hooks.
+- Decompiled local CS2 Panorama assets are available for research under the ignored repo folder `research/cs2-chat-vrf/`; the extraction tool is under `research/tools/vrf-cli/`. These files are not committed, but keeping them below the repo avoids scattering project research under random temp folders.

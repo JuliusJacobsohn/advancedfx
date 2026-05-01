@@ -42,6 +42,25 @@ Set-Location build\Release
 & "C:\Program Files\CMake\bin\cmake.exe" --install . --config Release -v
 ```
 
+## Fast AfxHookSource2 iteration
+
+After the initial configure/build has populated `build\Release`, rebuild only
+the x64 hook DLL while working on CS2 / `AfxHookSource2` changes:
+
+```powershell
+$env:PATH = "C:\Program Files\CMake\bin;$env:USERPROFILE\.cargo\bin;$env:USERPROFILE\.dotnet\tools;$env:PATH"
+
+Set-Location build\Release\advancedfx-x64
+& "C:\Program Files\CMake\bin\cmake.exe" --build . --config Release --target AfxHookSource2 -- /m:1 -r
+
+Set-Location ..\..\..
+Copy-Item -Force "build\Release\advancedfx-x64\AfxHookSource2\Release\AfxHookSource2.dll" "build\Release\dist\bin\x64\AfxHookSource2.dll"
+```
+
+Use the full top-level build/install only when installer, package, or shared
+dependency output changed. If MSVC reports `C1041` for a shared PDB during a
+parallel build, rebuild this target with `/m:1` as shown above.
+
 ## Outputs
 
 After a successful build/install:

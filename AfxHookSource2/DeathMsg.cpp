@@ -24,6 +24,7 @@
 
 #include <set>
 #include <algorithm>
+#include <list>
 #include <vector>
 #include <map>
 #include <sstream>
@@ -2090,6 +2091,524 @@ CON_COMMAND(mirv_scoreboard_rank, "Visually overrides scoreboard rank / Premier 
 	}
 
 	mirvScoreboardRank_PrintHelp(arg0);
+}
+
+struct SyntheticChatMessage {
+	std::string displayName;
+	std::string team = "none";
+	std::string visibility = "all";
+	std::string location;
+	std::string message;
+	int entityIndex = -1;
+	int userId = -1;
+	uint64_t xuid = 0;
+	bool alive = true;
+};
+
+namespace ChatNative {
+	constexpr int kSayText2MessageId = 118;
+
+	class CNetMessage {
+	public:
+		virtual ~CNetMessage() {}
+		virtual void* AsProto() const = 0;
+		virtual void* AsProto2() const = 0;
+		virtual void* GetNetMessage() const = 0;
+		virtual CNetMessage* CopyConstruct(const CNetMessage* other) const = 0;
+	};
+
+	class INetworkMessageInternal {
+	public:
+		virtual ~INetworkMessageInternal() = 0;
+		virtual const char* GetUnscopedName() = 0;
+		virtual void* GetNetMessageInfo() = 0;
+		virtual void SetMessageId(unsigned short nMessageId) = 0;
+		virtual void AddCategoryMask(int nMask, bool unk) = 0;
+		virtual void SwitchMode(int nMode) = 0;
+		virtual CNetMessage* AllocateMessage() = 0;
+	};
+
+	using CreateInterfaceFn = void* (*)(const char* pName, int* pReturnCode);
+
+	CreateInterfaceFn getFactory(const char* moduleName) {
+		auto module = GetModuleHandleA(moduleName);
+		if (!module) return nullptr;
+		return reinterpret_cast<CreateInterfaceFn>(GetProcAddress(module, "CreateInterface"));
+	}
+
+	void* createInterface(const char* moduleName, const char* interfaceName) {
+		auto factory = getFactory(moduleName);
+		if (!factory) return nullptr;
+		return factory(interfaceName, nullptr);
+	}
+
+	void* getNetworkMessages() {
+		static void* value = nullptr;
+		static bool tried = false;
+		if (!tried) {
+			tried = true;
+			value = createInterface("engine2.dll", "NetworkMessagesVersion001");
+			if (!value) value = createInterface("networksystem.dll", "NetworkMessagesVersion001");
+		}
+		return value;
+	}
+
+	template <typename Fn>
+	Fn vfunc(void* instance, size_t index) {
+		return instance ? reinterpret_cast<Fn>((*reinterpret_cast<void***>(instance))[index]) : nullptr;
+	}
+
+	INetworkMessageInternal* findNetworkMessageById(void* networkMessages, int id) {
+		using Fn = INetworkMessageInternal* (__fastcall*)(void*, int);
+		// INetworkMessages::FindNetworkMessageById is slot 30 in the current public CS2 SDK.
+		auto fn = vfunc<Fn>(networkMessages, 30);
+		return fn ? fn(networkMessages, id) : nullptr;
+	}
+
+	INetworkMessageInternal* findNetworkMessagePartial(void* networkMessages, const char* name) {
+		using Fn = INetworkMessageInternal* (__fastcall*)(void*, const char*);
+		// INetworkMessages::FindNetworkMessagePartial is slot 14 in the current public CS2 SDK.
+		auto fn = vfunc<Fn>(networkMessages, 14);
+		return fn ? fn(networkMessages, name) : nullptr;
+	}
+
+	void deallocateNetworkMessage(void* networkMessages, INetworkMessageInternal* messageType, CNetMessage* message) {
+		if (!networkMessages || !messageType || !message) return;
+		using Fn = void(__fastcall*)(void*, INetworkMessageInternal*, CNetMessage*);
+		// INetworkMessages::DeallocateNetMessageAbstract is slot 9.
+		auto fn = vfunc<Fn>(networkMessages, 9);
+		if (fn) fn(networkMessages, messageType, message);
+	}
+
+	std::string maybeTokenWithHash(const std::string& value) {
+		if (!value.empty() && value[0] == '#') return value;
+		return "#" + value;
+	}
+
+	std::string chooseMessageName(const SyntheticChatMessage& entry) {
+		const bool teamChat = 0 == _stricmp(entry.visibility.c_str(), "team");
+		const bool hasLocation = !entry.location.empty() && 0 != _stricmp(entry.location.c_str(), "none");
+
+		if (teamChat) {
+			if (0 == _stricmp(entry.team.c_str(), "CT")) {
+				if (!entry.alive) return "Cstrike_Chat_CT_Dead";
+				return hasLocation ? "Cstrike_Chat_CT_Loc" : "Cstrike_Chat_CT";
+			}
+			if (0 == _stricmp(entry.team.c_str(), "T")) {
+				if (!entry.alive) return "Cstrike_Chat_T_Dead";
+				return hasLocation ? "Cstrike_Chat_T_Loc" : "Cstrike_Chat_T";
+			}
+			return "Cstrike_Chat_Spec";
+		}
+
+		if (0 == _stricmp(entry.team.c_str(), "spec")) return "Cstrike_Chat_AllSpec";
+		if (!entry.alive) return "Cstrike_Chat_AllDead";
+		return "Cstrike_Chat_All";
+	}
+
+	struct SayText2ProtoView {
+		// Generated locally from CS2 usermessages.proto with protobuf 3.21.8.
+		// CNetMessage::AsProto() returns the protobuf subobject of CNetMessagePB<CUserMessageSayText2>.
+		static constexpr size_t kHasBits = 0x10;
+		static constexpr size_t kCachedSize = 0x14;
+		static constexpr size_t kMessageName = 0x18;
+		static constexpr size_t kParam1 = 0x20;
+		static constexpr size_t kParam2 = 0x28;
+		static constexpr size_t kParam3 = 0x30;
+		static constexpr size_t kParam4 = 0x38;
+		static constexpr size_t kChat = 0x40;
+		static constexpr size_t kEntityIndex = 0x44;
+
+		static constexpr uint32_t kHasMessageName = 0x00000001u;
+		static constexpr uint32_t kHasParam1 = 0x00000002u;
+		static constexpr uint32_t kHasParam2 = 0x00000004u;
+		static constexpr uint32_t kHasParam3 = 0x00000008u;
+		static constexpr uint32_t kHasParam4 = 0x00000010u;
+		static constexpr uint32_t kHasChat = 0x00000020u;
+		static constexpr uint32_t kHasEntityIndex = 0x00000040u;
+	};
+
+	const std::string* storeBorrowedProtoString(const std::string& value) {
+		// The CS2 protobuf object owns its destruction path. Mark these as
+		// default/borrowed strings so engine deallocation will not delete
+		// memory allocated by this DLL.
+		static std::list<std::string> storage;
+		storage.emplace_back(value);
+		return &storage.back();
+	}
+
+	void setArenaStringPtr(void* proto, size_t offset, const std::string& value) {
+		auto stringStorage = storeBorrowedProtoString(value);
+		*reinterpret_cast<uintptr_t*>(reinterpret_cast<unsigned char*>(proto) + offset) =
+			reinterpret_cast<uintptr_t>(stringStorage);
+	}
+
+	bool fillSayText2Message(CNetMessage* message, const SyntheticChatMessage& entry, const std::string& messageName) {
+		if (!message) return false;
+		auto proto = message->AsProto();
+		if (!proto) return false;
+
+		const auto location = (!entry.location.empty() && 0 != _stricmp(entry.location.c_str(), "none")) ? entry.location : "";
+		auto base = reinterpret_cast<unsigned char*>(proto);
+
+		*reinterpret_cast<uint32_t*>(base + SayText2ProtoView::kHasBits) =
+			SayText2ProtoView::kHasMessageName |
+			SayText2ProtoView::kHasParam1 |
+			SayText2ProtoView::kHasParam2 |
+			SayText2ProtoView::kHasParam3 |
+			SayText2ProtoView::kHasParam4 |
+			SayText2ProtoView::kHasChat |
+			SayText2ProtoView::kHasEntityIndex;
+		*reinterpret_cast<int*>(base + SayText2ProtoView::kCachedSize) = 0;
+		setArenaStringPtr(proto, SayText2ProtoView::kMessageName, maybeTokenWithHash(messageName));
+		setArenaStringPtr(proto, SayText2ProtoView::kParam1, entry.displayName);
+		setArenaStringPtr(proto, SayText2ProtoView::kParam2, entry.message);
+		setArenaStringPtr(proto, SayText2ProtoView::kParam3, location);
+		setArenaStringPtr(proto, SayText2ProtoView::kParam4, "");
+		*reinterpret_cast<bool*>(base + SayText2ProtoView::kChat) = true;
+		*reinterpret_cast<int32_t*>(base + SayText2ProtoView::kEntityIndex) = entry.entityIndex >= 0 ? entry.entityIndex : 0;
+
+		return true;
+	}
+
+	using SayText2HandlerFn = void(__fastcall*)(void*, CNetMessage*);
+
+	SayText2HandlerFn getSayText2Handler() {
+		static SayText2HandlerFn value = nullptr;
+		static bool tried = false;
+
+		if (!tried) {
+			tried = true;
+			auto clientDll = GetModuleHandleA("client.dll");
+			if (!clientDll) {
+				advancedfx::Warning("mirv_chat_insert: client.dll not loaded; native SayText2 handler unavailable.\n");
+				return nullptr;
+			}
+
+			const auto address = getAddress(
+				clientDll,
+				"48 89 4C 24 08 55 41 56 48 8D AC 24 ?? ?? ?? ?? "
+				"48 81 EC ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 4C 8B F2 "
+				"48 8B 01 FF 90 50 01 00 00 84 C0 74 ?? E8 ?? ?? ?? ?? "
+				"80 78 72 00 0F 85 ?? ?? ?? ?? 41 8B 46 74 48 89 B4 24 ?? ?? ?? ??");
+			value = reinterpret_cast<SayText2HandlerFn>(address);
+			if (value) {
+				advancedfx::Message("mirv_chat_insert: resolved native SayText2 handler at %p.\n", value);
+			}
+		}
+
+		return value;
+	}
+
+	bool dispatchViaNativeSayText2Handler(CNetMessage* message) {
+		auto handler = getSayText2Handler();
+		if (!handler) {
+			advancedfx::Warning("mirv_chat_insert: native SayText2 handler not found.\n");
+			return false;
+		}
+
+		advancedfx::Message("mirv_chat_insert: calling native SayText2 handler.\n");
+		handler(nullptr, message);
+		advancedfx::Message("mirv_chat_insert: native SayText2 handler returned.\n");
+		return true;
+	}
+}
+
+u_char* findHudChatPanel() {
+	auto hudPanel = g_myPanoramaWrapper.getHudPanel();
+	if (!hudPanel) return nullptr;
+
+	auto chats = g_myPanoramaWrapper.findChildrenInLayoutFileByClassName(hudPanel, "CSGOHudChat");
+	if (!chats.empty()) {
+		return chats[0];
+	}
+
+	return g_myPanoramaWrapper.findChildInLayoutFile(hudPanel, "ChatContainer");
+}
+
+bool resolveSyntheticChatPlayerByXuid(uint64_t xuid, PlayerInfo& outPlayer, int* outEntityIndex = nullptr) {
+	const int highestIndex = GetHighestEntityIndex();
+	for (int i = 0; i < highestIndex + 1; ++i) {
+		if (auto ent = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, i)) {
+			if (!ent->IsPlayerController()) continue;
+			auto player = getPlayerInfoFromControllerIndex(i);
+			if (player.xuid == xuid) {
+				outPlayer = player;
+				if (outEntityIndex) *outEntityIndex = i;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool applySyntheticChatMessage(const SyntheticChatMessage& entry) {
+	auto networkMessages = ChatNative::getNetworkMessages();
+
+	if (!networkMessages) {
+		advancedfx::Warning("mirv_chat_insert: NetworkMessagesVersion001 interface not found.\n");
+		return false;
+	}
+
+	auto messageType = ChatNative::findNetworkMessageById(networkMessages, ChatNative::kSayText2MessageId);
+	if (!messageType) {
+		messageType = ChatNative::findNetworkMessagePartial(networkMessages, "SayText2");
+	}
+	if (!messageType) {
+		advancedfx::Warning("mirv_chat_insert: SayText2 network message type not found.\n");
+		return false;
+	}
+
+	auto message = messageType->AllocateMessage();
+	if (!message) {
+		advancedfx::Warning("mirv_chat_insert: SayText2 AllocateMessage failed.\n");
+		return false;
+	}
+
+	const auto messageName = ChatNative::chooseMessageName(entry);
+	advancedfx::Message(
+		"mirv_chat_insert: allocated SayText2 message=%p proto=%p entity=%i token=%s.\n",
+		message,
+		message->AsProto(),
+		entry.entityIndex,
+		messageName.c_str());
+
+	if (!ChatNative::fillSayText2Message(message, entry, messageName)) {
+		advancedfx::Warning("mirv_chat_insert: failed to fill SayText2 protobuf object.\n");
+		ChatNative::deallocateNetworkMessage(networkMessages, messageType, message);
+		return false;
+	}
+
+	advancedfx::Message("mirv_chat_insert: filled SayText2 protobuf object.\n");
+
+	const bool handledSynchronously = ChatNative::dispatchViaNativeSayText2Handler(message);
+
+	advancedfx::Message(
+		"mirv_chat_insert: finished SayText2 direct entity=%i token=%s name=\"%s\" text=\"%s\" posted=%i.\n",
+		entry.entityIndex,
+		messageName.c_str(),
+		entry.displayName.c_str(),
+		entry.message.c_str(),
+		handledSynchronously ? 1 : 0);
+
+	advancedfx::Message("mirv_chat_insert: deallocating SayText2 message.\n");
+	ChatNative::deallocateNetworkMessage(networkMessages, messageType, message);
+	advancedfx::Message("mirv_chat_insert: deallocated SayText2 message.\n");
+	return handledSynchronously;
+}
+
+bool clearSyntheticChatMessages() {
+	advancedfx::Warning("mirv_chat_insert clear: disabled with the rejected ChatHistoryText injection path.\n");
+	return false;
+}
+
+bool inspectHudChatPanel() {
+	auto contextPanel = findHudChatPanel();
+	if (!contextPanel) {
+		advancedfx::Warning("mirv_chat_insert inspect: CSGOHudChat / ChatContainer panel not found.\n");
+		return false;
+	}
+
+	auto panelId = *(char**)(contextPanel + CS2::PanoramaUIPanel::panelId);
+	auto panel2D = *(CPanel2D**)(contextPanel + 0x8);
+	advancedfx::Message(
+		"mirv_chat_insert inspect: context panel=%p id=%s class=%s\n",
+		contextPanel,
+		panelId ? panelId : "",
+		panel2D ? panel2D->getClassName() : "null");
+
+	std::ostringstream script;
+	script
+		<< "(function(){"
+		<< "var root=$.GetContextPanel();"
+		<< "$.Msg('mirv_chat_insert inspect context id='+(root?root.id:'<null>')+' type='+(root?root.paneltype:'<null>'));"
+		<< "var chat=root&&root.FindChildTraverse?root.FindChildTraverse('ChatHistoryText'):null;"
+		<< "$.Msg('mirv_chat_insert inspect ChatHistoryText='+(chat&&chat.IsValid&&chat.IsValid()?('id='+chat.id+' type='+chat.paneltype+' textLen='+(chat.text?chat.text.length:0)):'not found'));"
+		<< "var names=[];"
+		<< "var o=root;"
+		<< "for(var depth=0;o&&depth<4;o=Object.getPrototypeOf(o),++depth){"
+		<< "try{Object.getOwnPropertyNames(o).forEach(function(n){if(names.indexOf(n)<0)names.push(n);});}catch(e){}"
+		<< "}"
+		<< "names=names.filter(function(n){return /chat|say|submit|text|message|history/i.test(n);}).sort();"
+		<< "$.Msg('mirv_chat_insert inspect candidate methods/properties: '+names.join(', '));"
+		<< "})();";
+
+	return g_myPanoramaWrapper.runScript(contextPanel, script.str().c_str());
+}
+
+bool inspectNativeChatPath() {
+	auto networkMessages = ChatNative::getNetworkMessages();
+	auto messageType = networkMessages ? ChatNative::findNetworkMessageById(networkMessages, ChatNative::kSayText2MessageId) : nullptr;
+	if (!messageType && networkMessages) {
+		messageType = ChatNative::findNetworkMessagePartial(networkMessages, "SayText2");
+	}
+	auto handler = ChatNative::getSayText2Handler();
+	advancedfx::Message(
+		"mirv_chat_insert inspect native: networkMessages=%p sayText2=%p handler=%p\n",
+		networkMessages,
+		messageType,
+		handler);
+	return nullptr != networkMessages && nullptr != messageType && nullptr != handler;
+}
+
+void mirvChatInsert_PrintHelp(const char* arg0) {
+	advancedfx::Message(
+		"%s byXuid x<ullXuid> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s byUserId <iUserId> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s name <displayName> [team=T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>\n"
+		"%s clear\n"
+		"%s inspect\n"
+		"Examples:\n"
+		"\t%s byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now\n"
+		"\tmirv_cmd addAtTick 12345 %s byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now\n"
+		"Notes:\n"
+		"\tThe command allocates native CUserMessageSayText2, fills the protobuf fields directly, then calls CS2's native SayText2 HUD handler.\n"
+		"\tUse mirv_cmd addAtTick / addAtTime to schedule insertion during demo playback.\n"
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+	);
+}
+
+bool parseSyntheticChatOptions(advancedfx::ICommandArgs* args, int firstOption, SyntheticChatMessage& entry) {
+	const int argc = args->ArgC();
+	int messageIndex = -1;
+
+	for (int i = firstOption; i < argc; ++i) {
+		const char* arg = args->ArgV(i);
+		if (0 == _stricmp(arg, "message")) {
+			messageIndex = i + 1;
+			break;
+		}
+		else if (StringIBeginsWith(arg, "team=")) {
+			entry.team = arg + strlen("team=");
+		}
+		else if (StringIBeginsWith(arg, "alive=")) {
+			entry.alive = 0 != atoi(arg + strlen("alive="));
+		}
+		else if (StringIBeginsWith(arg, "visibility=")) {
+			entry.visibility = arg + strlen("visibility=");
+		}
+		else if (StringIBeginsWith(arg, "location=")) {
+			entry.location = arg + strlen("location=");
+			std::replace(entry.location.begin(), entry.location.end(), '_', ' ');
+		}
+		else {
+			advancedfx::Warning("mirv_chat_insert: unknown option before message: %s\n", arg);
+			return false;
+		}
+	}
+
+	if (messageIndex < 0 || messageIndex >= argc) {
+		advancedfx::Warning("mirv_chat_insert: missing message <text...>.\n");
+		return false;
+	}
+
+	for (int i = messageIndex; i < argc; ++i) {
+		if (!entry.message.empty()) entry.message.push_back(' ');
+		entry.message.append(args->ArgV(i));
+	}
+
+	if (entry.message.empty()) {
+		advancedfx::Warning("mirv_chat_insert: message cannot be empty.\n");
+		return false;
+	}
+
+	return true;
+}
+
+CON_COMMAND(mirv_chat_insert, "Insert synthetic chat into CS2's real HUD chat panel.")
+{
+	const auto arg0 = args->ArgV(0);
+	const auto argc = args->ArgC();
+
+	if (2 <= argc) {
+		const auto arg1 = args->ArgV(1);
+
+		if (0 == _stricmp("clear", arg1)) {
+			clearSyntheticChatMessages();
+			return;
+		}
+
+		if (0 == _stricmp("inspect", arg1)) {
+			inspectHudChatPanel();
+			inspectNativeChatPath();
+			return;
+		}
+
+		SyntheticChatMessage entry;
+		int firstOption = 3;
+
+		if (0 == _stricmp("byXuid", arg1)) {
+			if (argc < 5) {
+				mirvChatInsert_PrintHelp(arg0);
+				return;
+			}
+
+			uint64_t xuid = 0;
+			if (!parseXuidArg(args->ArgV(2), xuid)) {
+				advancedfx::Warning("mirv_chat_insert: invalid XUID: %s\n", args->ArgV(2));
+				return;
+			}
+
+			PlayerInfo player;
+			int entityIndex = -1;
+			if (resolveSyntheticChatPlayerByXuid(xuid, player, &entityIndex) && player.name) {
+				entry.displayName = player.name;
+				entry.entityIndex = entityIndex;
+				entry.userId = player.userId;
+				entry.xuid = player.xuid;
+			}
+			else {
+				entry.displayName = args->ArgV(2);
+				advancedfx::Warning("mirv_chat_insert: XUID not currently resolved; using %s as display name.\n", entry.displayName.c_str());
+			}
+		}
+		else if (0 == _stricmp("byUserId", arg1)) {
+			if (argc < 5) {
+				mirvChatInsert_PrintHelp(arg0);
+				return;
+			}
+
+			const int userId = atoi(args->ArgV(2));
+			auto player = getPlayerInfoFromControllerIndex(userId + 1);
+			if (player.name) {
+				entry.displayName = player.name;
+				entry.entityIndex = userId + 1;
+				entry.userId = player.userId;
+				entry.xuid = player.xuid;
+			}
+			else {
+				entry.displayName = args->ArgV(2);
+				advancedfx::Warning("mirv_chat_insert: userId not currently resolved; using %s as display name.\n", entry.displayName.c_str());
+			}
+		}
+		else if (0 == _stricmp("name", arg1)) {
+			if (argc < 5) {
+				mirvChatInsert_PrintHelp(arg0);
+				return;
+			}
+			entry.displayName = args->ArgV(2);
+		}
+		else {
+			mirvChatInsert_PrintHelp(arg0);
+			return;
+		}
+
+		if (!parseSyntheticChatOptions(args, firstOption, entry)) {
+			return;
+		}
+
+		applySyntheticChatMessage(entry);
+		return;
+	}
+
+	mirvChatInsert_PrintHelp(arg0);
 }
 
 enum panelMatchType {
