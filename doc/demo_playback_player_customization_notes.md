@@ -11,6 +11,17 @@ Current topic notes:
 - [Weapon skins](demo_playback_weapon_skins.md)
 - [Synthetic chat](demo_playback_chat.md)
 
+Current implementation status:
+
+| Topic | Status | Notes |
+| --- | --- | --- |
+| Names | Done | Runtime `mirv_replace_name` hooks work for HUD/UI name lookups; death notices are handled through `mirv_deathmsg`. |
+| Ranks | Done | Scoreboard visual rank overrides work through `mirv_scoreboard_rank`; other rank surfaces would be separate follow-up work. |
+| Synthetic chat | Done | `mirv_chat_insert` inserts native all/team chat rows through CS2's real closed-chat feed and can be scheduled with `mirv_cmd`. |
+| Player color | Notes only | Intended as a visual override topic; implementation details are tracked separately. |
+| Avatars | Notes only | Intended as a visual override topic; implementation details are tracked separately. |
+| Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
+
 Shared implementation constraints:
 
 - Prefer demo-playback guards for every visual override.
