@@ -6,7 +6,9 @@ Desired feature: insert chat messages at a specific demo tick or timestamp with 
 
 For the local test demo, use the known player names and XUIDs in [demo_playback_test_demo_roster.md](demo_playback_test_demo_roster.md).
 
-Target command shape:
+## Command reference
+
+The command inserts exactly one synthetic row into CS2's normal closed chat feed at the moment the command runs.
 
 ```text
 mirv_chat_insert byXuid x<steamid64> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
@@ -16,14 +18,81 @@ mirv_chat_insert clear
 mirv_chat_insert inspect
 ```
 
-Scheduling is handled by the existing `mirv_cmd` system:
+Targets:
+
+- `byXuid x<steamid64>` targets the current demo player with that SteamID64/XUID. This is the preferred target for stable scripts.
+- `byUserId <id>` targets the current demo player by demo user id. This is convenient for local test demos, but less portable across demos.
+- `name <displayName>` uses a literal display name and does not resolve a player entity. Use explicit `team=` / `alive=` values with this form when team/dead/spec formatting matters.
+
+Options:
+
+- `message <text...>` is required and consumes every remaining argument. Put it last. Quotes are usually not needed because the parser joins all remaining tokens with spaces.
+- `visibility=all` renders an all-chat row. This is the default.
+- `visibility=team` renders a team-chat row. The row is still subject to CS2's normal viewer/team visibility filtering.
+- `team=auto` infers `T`, `CT`, `spec`, or `none` from the current player controller for `byXuid` / `byUserId`. This is the default when the player can be resolved.
+- `team=T`, `team=CT`, `team=spec`, or `team=none` overrides team inference.
+- `alive=1` or `alive=0` overrides alive/dead inference. If omitted for `byXuid` / `byUserId`, the command checks the current player pawn health.
+- `location=<string>` sets the team-chat location token parameter. Underscores are converted to spaces, so `location=A_Ramp` renders as `A Ramp`. Use `location=none` or omit it to avoid a location.
+
+Utility commands:
+
+- `mirv_chat_insert inspect` checks whether the HUD chat panel, `NetworkMessagesVersion001`, `SayText2`, and the native SayText2 handler can be found. It does not insert a message.
+- `mirv_chat_insert clear` is intentionally disabled. The rejected fake `ChatHistoryText` path had something to clear; native CS2 chat rows are owned by the game HUD.
+
+Direct examples:
+
+```text
+mirv_chat_insert byXuid x76561197962023477 visibility=all message rotating now
+mirv_chat_insert byXuid x76561197962023477 visibility=team location=A_Ramp message rotate now
+mirv_chat_insert byUserId 9 team=CT alive=1 visibility=team location=A_Ramp message rotate now
+mirv_chat_insert name caster team=spec alive=1 visibility=all message bought two smokes
+mirv_chat_insert inspect
+```
+
+## Scheduling examples
+
+Scheduling is handled by the existing `mirv_cmd` system. `mirv_chat_insert` should be the command payload that `mirv_cmd` executes.
+
+Message at demo tick:
 
 ```text
 mirv_cmd addAtTick 12345 mirv_chat_insert byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now
+```
+
+Message at demo time:
+
+```text
 mirv_cmd addAtTime 42.5 mirv_chat_insert name caster team=spec visibility=all message bought two smokes
 ```
 
-The `message` token deliberately consumes all remaining command arguments. This makes scheduled commands more reliable, because `mirv_cmd addAtTick` stores and replays the remaining command text as one command string.
+Pause shortly after a message for visual inspection:
+
+```text
+mirv_cmd addAtTick 300 mirv_chat_insert byXuid x76561197962023477 visibility=all message handler_all_probe
+mirv_cmd addAtTick 330 demo_pause
+```
+
+Quit shortly after a log-only probe:
+
+```text
+mirv_cmd addAtTick 300 mirv_chat_insert byXuid x76561197962023477 visibility=all message handler_all_probe
+mirv_cmd addAtTick 360 quit
+```
+
+Script a short conversation:
+
+```text
+mirv_cmd addAtTick 300 mirv_chat_insert byXuid x76561198723801816 visibility=all message gl hf
+mirv_cmd addAtTick 304 mirv_chat_insert byXuid x76561198723801816 visibility=team location=T_Start message walk mid together
+mirv_cmd addAtTick 308 mirv_chat_insert byXuid x76561198772930198 visibility=team location=T_Start message flashing ramp
+mirv_cmd addAtTick 312 mirv_chat_insert byXuid x76561198721306201 visibility=all message banana is quiet
+mirv_cmd addAtTick 316 mirv_chat_insert byXuid x76561197962023477 visibility=all message rotating now
+mirv_cmd addAtTick 340 demo_pause
+```
+
+The `message` token deliberately consumes all remaining command arguments. This makes scheduled commands more reliable, because `mirv_cmd addAtTick` / `mirv_cmd addAtTime` store and replay the remaining command text as one command string.
+
+`mirv_cmd addAtTick` is relative to demo playback, not CS2 process launch. In the local test demo, tick `300` is early in the first round and maps to a `CGameRules` log tick around `3400`. Chat rows animate in, so screenshot automation should wait roughly 1.5-2.0 seconds after the last inserted row before capturing.
 
 Rejected implementations:
 
