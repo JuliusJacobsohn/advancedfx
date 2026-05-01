@@ -1,6 +1,6 @@
 # Demo Playback Synthetic Chat
 
-Status: working native prototype. Visual Panorama overlays and direct `ChatHistoryText` mutation were rejected because they do not enter CS2's real closed-chat feed. The current implementation constructs a native `CUserMessageSayText2` message through Source 2's `NetworkMessagesVersion001`, fills the CS2-allocated protobuf object directly, and calls CS2's native `CHudChatDelegate` SayText2 HUD handler. This renders into the real closed chat feed with CS2's own row styling and lifetime.
+Status: working native prototype. Visual Panorama overlays and direct `ChatHistoryText` mutation were rejected because they do not enter CS2's real closed-chat feed. The current implementation constructs a native `CUserMessageSayText2` message through Source 2's `NetworkMessagesVersion001`, serializes a normal SayText2 protobuf payload, parses it into the CS2-allocated protobuf object with a CS2-compatible protobuf-lite runtime, and calls CS2's native `CHudChatDelegate` SayText2 HUD handler. This renders into the real closed chat feed with CS2's own row styling and lifetime.
 
 Desired feature: insert chat messages at a specific demo tick or timestamp with player name, location, team, alive/dead state, team/all visibility, and message text.
 
@@ -76,7 +76,7 @@ Quit shortly after a log-only probe:
 
 ```text
 mirv_cmd addAtTick 300 mirv_chat_insert byXuid x76561197962023477 visibility=all message handler_all_probe
-mirv_cmd addAtTick 360 quit
+mirv_cmd addAtTick 960 quit
 ```
 
 Script a short conversation:
@@ -87,7 +87,7 @@ mirv_cmd addAtTick 304 mirv_chat_insert byXuid x76561198723801816 visibility=tea
 mirv_cmd addAtTick 308 mirv_chat_insert byXuid x76561198772930198 visibility=team location=T_Start message flashing ramp
 mirv_cmd addAtTick 312 mirv_chat_insert byXuid x76561198721306201 visibility=all message banana is quiet
 mirv_cmd addAtTick 316 mirv_chat_insert byXuid x76561197962023477 visibility=all message rotating now
-mirv_cmd addAtTick 340 demo_pause
+mirv_cmd addAtTick 960 quit
 ```
 
 The `message` token deliberately consumes all remaining command arguments. This makes scheduled commands more reliable, because `mirv_cmd addAtTick` / `mirv_cmd addAtTime` store and replay the remaining command text as one command string.
@@ -117,14 +117,14 @@ Research findings:
 - Current SteamDatabase `usermessages.proto` maps `UM_SayText2` to id `118`. This is the base Source 2 user-message id used by the current native prototype; the older `cstrike15_usermessages.proto` ids such as `CS_UM_SayText2 = 306` are not the id used for `NetworkMessagesVersion001::FindNetworkMessageById`.
 - CounterStrikeSharp's user-message API provided the useful allocation pattern: `INetworkMessages::FindNetworkMessageById` / `FindNetworkMessagePartial`, `INetworkMessageInternal::AllocateMessage`, and protobuf field mutation.
 - SwiftlyS2's CS2 gamedata was useful for event-system research, but event dispatch was not the successful local-HUD path. The retained implementation calls the native HUD SayText2 handler directly.
-- HLAE's linked protobuf version must not be used directly against CS2-allocated protobuf objects. A previous attempt cast the engine-allocated `CNetMessagePB<CUserMessageSayText2>` to HLAE's protobuf ABI and crashed.
-- Feeding normal protobuf wire bytes to CS2's `SayText2` parser failed without crashing (`bitsRead=72`), and feeding the legacy Source user-message stream also failed without crashing (`bitsRead=88`). The current path avoids both parser formats and fills the CS2-allocated protobuf object directly.
-- A local generated protobuf layout check under `research/proto-gen/` matches CS2's observed allocation size: `CNetMessagePB<CUserMessageSayText2>` is `0x78`, with a `0x30` `CNetMessage` base and a `0x48` `CUserMessageSayText2` protobuf subobject. The fields used by the direct writer are `has_bits` at `0x10`, `messagename` at `0x18`, `param1` at `0x20`, `param2` at `0x28`, `param3` at `0x30`, `param4` at `0x38`, `chat` at `0x40`, and `entityindex` at `0x44` relative to `CNetMessage::AsProto()`.
+- HLAE's existing protobuf v31.1 dependency must not be used directly against CS2-allocated protobuf objects. A previous attempt cast the engine-allocated `CNetMessagePB<CUserMessageSayText2>` to HLAE's v31.1 protobuf ABI and crashed.
+- Feeding normal protobuf wire bytes to CS2's `SayText2` `INetworkMessageInternal` parser failed without crashing (`bitsRead=72`), and feeding the legacy Source user-message stream also failed without crashing (`bitsRead=88`). The current path instead calls `google::protobuf::MessageLite::ParseFromArray` on the CS2-allocated protobuf subobject with an isolated protobuf 3.21.8 lite runtime.
+- A local generated protobuf layout check under `research/proto-gen/` matches CS2's observed allocation size: `CNetMessagePB<CUserMessageSayText2>` is `0x78`, with a `0x30` `CNetMessage` base and a `0x48` `CUserMessageSayText2` protobuf subobject. This is retained as a diagnostic clue only; the current implementation no longer writes those fields by hard-coded offsets.
 
 Implementation direction:
 
 - Construct and dispatch something equivalent to `CUserMessageSayText2`.
-- The current prototype fills fields `entityindex`, `chat`, `messagename`, `param1`, `param2`, `param3`, and `param4` directly in the real protobuf object returned by `CNetMessage::AsProto()`.
+- The current prototype serializes fields `entityindex`, `chat`, `messagename`, `param1`, `param2`, `param3`, and `param4` as protobuf wire data, then parses that payload into the real protobuf object returned by `CNetMessage::AsProto()`.
 - The result must be rendered by the real CS2 chat component, using the same position, row template, lifetime, font, colors, and formatting as demo chat.
 - A Panorama implementation is acceptable only if it calls a native method on `CSGOHudChat`. Creating separate HUD labels/panels, or writing `ChatHistoryText` directly, is the rejected overlay/popup approach.
 - For replacement workflows, hide recorded chat with CS2/HLAE settings such as `tv_nochat true` where applicable, then schedule synthetic native chat rows.
@@ -134,8 +134,8 @@ Current implementation behavior:
 - `mirv_chat_insert` resolves the player name and controller entity index for `byXuid` / `byUserId`.
 - For `byXuid` / `byUserId`, omitted `team` and `alive` values are inferred from the current player controller / pawn when possible. Use explicit `team=` / `alive=` to override the inferred state for staged conversations.
 - It selects `Cstrike_Chat_All`, `Cstrike_Chat_AllDead`, `Cstrike_Chat_AllSpec`, `Cstrike_Chat_CT`, `Cstrike_Chat_T`, `Cstrike_Chat_CT_Loc`, `Cstrike_Chat_T_Loc`, `Cstrike_Chat_CT_Dead`, `Cstrike_Chat_T_Dead`, or `Cstrike_Chat_Spec` from `visibility`, `team`, `alive`, and `location`.
-- It allocates native message id `118` / partial name `SayText2` and fills the CS2-allocated `CUserMessageSayText2` object directly. The direct layout comes from locally generated protobuf 3.21.8 code and matches the observed `0x78` allocation.
-- The parser-based paths remain documented as failed probes: raw protobuf wire data and the legacy byte/string `SayText2` stream both reached the parser but were rejected.
+- It allocates native message id `118` / partial name `SayText2`, builds a normal protobuf SayText2 payload, and parses that payload into the CS2-allocated `CUserMessageSayText2` object through `MessageLite::ParseFromArray`.
+- The rejected parser-based probes were different from the retained implementation: raw protobuf wire data and the legacy byte/string `SayText2` stream both failed when fed to CS2's `INetworkMessageInternal` parser.
 - It calls CS2's native `CHudChatDelegate` SayText2 handler directly. This is the first path that rendered a visible synthetic row in the real closed chat feed.
 - Old event-system dispatch experiments are intentionally not exposed as command options: broadcast posted but was invisible, while local/filter paths crashed during testing.
 - The client-side `player_chat` event probe is disabled after an insertion crash report; it is not the current path.
@@ -144,22 +144,21 @@ Current implementation behavior:
 
 Safer implementation evaluation:
 
-- The brittle part of the current working path is not the concept of a native `SayText2` message. The brittle part is writing the `CUserMessageSayText2` protobuf fields by hard-coded offsets and borrowing `std::string` storage across the CS2 / HLAE boundary.
-- CounterStrikeSharp's CS2 user-message wrapper shows the safer allocation and mutation pattern used by an active open source CS2 project: allocate through `INetworkMessageInternal::AllocateMessage()`, cast the returned object to `CNetMessagePB<google::protobuf::Message>`, then mutate fields through protobuf reflection by name (`messagename`, `param1`, `param2`, `param3`, `param4`, `chat`, `entityindex`).
+- The current path is better than the earlier working prototype because it avoids the two most dangerous assumptions from that prototype: hard-coded protobuf field offsets and borrowed `std::string` storage crossing the CS2 / HLAE module boundary.
+- The retained path still allocates the real CS2 `SayText2` message through `INetworkMessageInternal::AllocateMessage()` and still lets CS2 deallocate it. The only mutation step is a normal protobuf parse into the CS2-owned object.
+- CounterStrikeSharp's CS2 user-message wrapper shows the useful allocation pattern used by an active open source CS2 project: allocate through `INetworkMessageInternal::AllocateMessage()`, cast the returned object to `CNetMessagePB<google::protobuf::Message>`, then mutate fields through protobuf APIs.
 - The matching public Source 2 SDK layout confirms the same allocation rule: do not construct `CNetMessagePB` directly; allocate through the engine network-message interface, then treat the result as a `CNetMessagePB<ProtoClass>`.
-- That reflection path should remove the raw `SayText2ProtoView` offsets and let protobuf own the string fields normally, which is safer across Valve builds as long as the `SayText2` field names remain stable.
-- The integration blocker is protobuf ABI compatibility. SourceMod-family CS2 projects use the HL2SDK protobuf `3.21.8` headers and `libprotobuf.lib`. This repo currently fetches protobuf `v31.1` for other components, and earlier attempts to use HLAE's protobuf ABI against CS2-allocated protobuf objects crashed.
-- A trial downgrade to upstream protobuf `3.21.8` was built into `AfxHookSource2` on 2026-05-01. Reflection field writes succeeded far enough to render the first native chat row, but CS2 crashed during cleanup immediately after `mirv_chat_insert: deallocating SayText2 message.` This means simply matching the protobuf version is not sufficient when the static protobuf runtime still lives in the HLAE DLL; ownership/runtime boundaries remain unsafe.
-- A production version should therefore add an isolated AfxHookSource2-only protobuf 3.21.8 / Source 2 SDK reflection helper, or otherwise call CS2's own protobuf reflection functions with the exact 3.21.8 ABI. It should not cast CS2 objects to the existing repo protobuf v31.1 types.
-- Estimated work: a focused prototype is roughly half a day to one day now that local launch and screenshot validation are automated. A clean integration that avoids conflicting protobuf versions in the CMake tree is closer to one to two days.
-- The handler lookup remains a separate risk. Even with reflection field mutation, the current implementation still finds and calls the native `CHudChatDelegate` SayText2 handler by byte pattern. The most robust final route would either locate that handler through engine registration / user-message dispatch metadata or find a stable `CCSGO_HudChat` append entry point.
+- Full protobuf reflection was tested with an isolated upstream protobuf 3.21.8 runtime. It rendered chat, but crashed during CS2 cleanup immediately after `mirv_chat_insert: deallocating SayText2 message.` Reflection likely installs or touches ownership metadata in a way that does not match CS2's exact protobuf runtime.
+- `MessageLite::ParseFromArray` with the same isolated protobuf 3.21.8 lite runtime has been more stable in testing: it rendered multiple all/team chat rows and CS2 deallocated the messages without crashing.
+- This is production-ready enough for the current feature branch, but not maintenance-free. The remaining version-sensitive pieces are the `CHudChatDelegate` SayText2 handler byte pattern and the assumption that CS2's `CUserMessageSayText2` wire schema remains compatible with protobuf 3.21-style generated layout.
+- The handler lookup remains a separate risk. The current implementation still finds and calls the native `CHudChatDelegate` SayText2 handler by byte pattern. The most robust final route would either locate that handler through engine registration / user-message dispatch metadata or find a stable `CCSGO_HudChat` append entry point.
 
 Native binary research findings:
 
 - `client.dll` contains `CS_UM_SayText2`, `CUserMessageSayText2_t`, and `CUserMessageSayText2` strings, but direct string xrefs found registration/type metadata rather than the runtime handler.
 - `client.dll` contains `CCSGO_HudChat` xrefs around RVAs `0xc674e2`, `0xcefe96`, `0xd0511a`, `0xd4147f`, `0xdb9afa`, `0xdff917`, and `0xe07949` in the tested build.
 - `CHudChatDelegate` has a SayText2 handler at client RVA `0x10c4150` in the tested build. The implementation resolves it by byte pattern instead of hard-coding the RVA.
-- The handler reads the same fields we fill on the full `CNetMessagePB<CUserMessageSayText2>` object: `message_name` at object offset `0x48`, `param1` at `0x50`, `param2` at `0x58`, `param3` at `0x60`, `param4` at `0x68`, `chat` at `0x70`, and `entityindex` at `0x74`.
+- The handler reads the same fields we populate on the full `CNetMessagePB<CUserMessageSayText2>` object: `message_name` at object offset `0x48`, `param1` at `0x50`, `param2` at `0x58`, `param3` at `0x60`, `param4` at `0x68`, `chat` at `0x70`, and `entityindex` at `0x74`.
 - The native handler calls chat formatting helpers at RVAs `0x10c0fe0` / `0x10c10f0`, which find `CCSGO_HudVoiceStatus` and then append through the real `CCSGO_HudChat` path.
 - The first native user-message prototype used public SDK virtual-table assumptions for `INetworkMessages` and `IGameEventSystem`. That was not safe in-process for this CS2 build: probing the path in `inspect` and sending through it both crashed the game. The retained fix is to avoid protobuf ABI casts and use the current Windows gamedata slot numbers for `IGameEventSystem`.
 - The `player_chat` event backend was not a safe path; insertion crashed CS2. The likely robust path remains the actual client handler for `CUserMessageSayText2` / `CCSGO_HudChat`.
@@ -181,10 +180,10 @@ mirv_cmd addAtTick 304 mirv_chat_insert byXuid x76561198723801816 visibility=tea
 mirv_cmd addAtTick 308 mirv_chat_insert byXuid x76561198772930198 visibility=team location=T_Start message flashing ramp
 mirv_cmd addAtTick 312 mirv_chat_insert byXuid x76561198721306201 visibility=all message banana is quiet
 mirv_cmd addAtTick 316 mirv_chat_insert byXuid x76561197962023477 visibility=all message rotating now
-mirv_cmd addAtTick 330 demo_pause
+mirv_cmd addAtTick 960 quit
 ```
 
-Result: all five lines rendered through CS2's native closed chat feed. The team messages used the T team-chat token with location (`T Start`) and the all-chat messages used the normal `[ALL]` token. Capture timing matters: when several rows are inserted within a short tick window, wait roughly 1.5-2.0 seconds after the final insertion before taking a still screenshot so the native chat row animation has completed.
+Result: all five lines rendered through CS2's native closed chat feed, then CS2 closed through the scheduled `quit` command instead of crashing. The team messages used the T team-chat token with location (`T Start`) and the all-chat messages used the normal `[ALL]` token. Capture timing matters: when several rows are inserted within a short tick window, wait roughly 1.5-2.0 seconds after the final insertion before taking a still screenshot so the native chat row animation has completed. The verification capture is `research/chat-lite-parse-conversation.png`.
 
 Useful chat token mapping to investigate:
 

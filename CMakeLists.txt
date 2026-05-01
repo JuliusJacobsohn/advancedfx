@@ -179,6 +179,7 @@ elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
     )
     FetchContent_MakeAvailable(nasm)
 
+    add_subdirectory("deps/release/protobuf_cs2")
     add_subdirectory("deps/release/openexr")
     add_subdirectory("ShaderBuilder")
     add_subdirectory("AfxHookSource")
