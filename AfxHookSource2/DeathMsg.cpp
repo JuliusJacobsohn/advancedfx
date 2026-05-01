@@ -29,6 +29,8 @@
 #include <map>
 #include <sstream>
 
+#include <google/protobuf/message_lite.h>
+
 // TODO: move panorama stuff out after addresses.cpp is done
 // decompose/change myPanoramaWrapper too
 // doing it messy way here for now because lazy
@@ -2208,69 +2210,50 @@ namespace ChatNative {
 		return "Cstrike_Chat_All";
 	}
 
-	struct SayText2ProtoView {
-		// Generated locally from CS2 usermessages.proto with protobuf 3.21.8.
-		// CNetMessage::AsProto() returns the protobuf subobject of CNetMessagePB<CUserMessageSayText2>.
-		static constexpr size_t kHasBits = 0x10;
-		static constexpr size_t kCachedSize = 0x14;
-		static constexpr size_t kMessageName = 0x18;
-		static constexpr size_t kParam1 = 0x20;
-		static constexpr size_t kParam2 = 0x28;
-		static constexpr size_t kParam3 = 0x30;
-		static constexpr size_t kParam4 = 0x38;
-		static constexpr size_t kChat = 0x40;
-		static constexpr size_t kEntityIndex = 0x44;
-
-		static constexpr uint32_t kHasMessageName = 0x00000001u;
-		static constexpr uint32_t kHasParam1 = 0x00000002u;
-		static constexpr uint32_t kHasParam2 = 0x00000004u;
-		static constexpr uint32_t kHasParam3 = 0x00000008u;
-		static constexpr uint32_t kHasParam4 = 0x00000010u;
-		static constexpr uint32_t kHasChat = 0x00000020u;
-		static constexpr uint32_t kHasEntityIndex = 0x00000040u;
-	};
-
-	const std::string* storeBorrowedProtoString(const std::string& value) {
-		// The CS2 protobuf object owns its destruction path. Mark these as
-		// default/borrowed strings so engine deallocation will not delete
-		// memory allocated by this DLL.
-		static std::list<std::string> storage;
-		storage.emplace_back(value);
-		return &storage.back();
+	void appendProtoVarint(std::vector<unsigned char>& out, uint64_t value) {
+		while (value >= 0x80) {
+			out.push_back(static_cast<unsigned char>((value & 0x7f) | 0x80));
+			value >>= 7;
+		}
+		out.push_back(static_cast<unsigned char>(value));
 	}
 
-	void setArenaStringPtr(void* proto, size_t offset, const std::string& value) {
-		auto stringStorage = storeBorrowedProtoString(value);
-		*reinterpret_cast<uintptr_t*>(reinterpret_cast<unsigned char*>(proto) + offset) =
-			reinterpret_cast<uintptr_t>(stringStorage);
+	void appendProtoStringField(std::vector<unsigned char>& out, int fieldNumber, const std::string& value) {
+		appendProtoVarint(out, (static_cast<uint64_t>(fieldNumber) << 3) | 2);
+		appendProtoVarint(out, value.size());
+		out.insert(out.end(), value.begin(), value.end());
+	}
+
+	std::vector<unsigned char> makeSayText2Payload(const SyntheticChatMessage& entry, const std::string& messageName) {
+		const auto location = (!entry.location.empty() && 0 != _stricmp(entry.location.c_str(), "none")) ? entry.location : "";
+		std::vector<unsigned char> payload;
+		payload.reserve(16 + messageName.size() + entry.displayName.size() + entry.message.size() + location.size());
+
+		appendProtoVarint(payload, (1u << 3) | 0u);
+		appendProtoVarint(payload, entry.entityIndex >= 0 ? static_cast<uint64_t>(entry.entityIndex) : 0u);
+		appendProtoVarint(payload, (2u << 3) | 0u);
+		appendProtoVarint(payload, 1);
+		appendProtoStringField(payload, 3, maybeTokenWithHash(messageName));
+		appendProtoStringField(payload, 4, entry.displayName);
+		appendProtoStringField(payload, 5, entry.message);
+		appendProtoStringField(payload, 6, location);
+		appendProtoStringField(payload, 7, "");
+		return payload;
 	}
 
 	bool fillSayText2Message(CNetMessage* message, const SyntheticChatMessage& entry, const std::string& messageName) {
 		if (!message) return false;
-		auto proto = message->AsProto();
+		auto proto = static_cast<google::protobuf::MessageLite*>(message->AsProto());
 		if (!proto) return false;
 
-		const auto location = (!entry.location.empty() && 0 != _stricmp(entry.location.c_str(), "none")) ? entry.location : "";
-		auto base = reinterpret_cast<unsigned char*>(proto);
-
-		*reinterpret_cast<uint32_t*>(base + SayText2ProtoView::kHasBits) =
-			SayText2ProtoView::kHasMessageName |
-			SayText2ProtoView::kHasParam1 |
-			SayText2ProtoView::kHasParam2 |
-			SayText2ProtoView::kHasParam3 |
-			SayText2ProtoView::kHasParam4 |
-			SayText2ProtoView::kHasChat |
-			SayText2ProtoView::kHasEntityIndex;
-		*reinterpret_cast<int*>(base + SayText2ProtoView::kCachedSize) = 0;
-		setArenaStringPtr(proto, SayText2ProtoView::kMessageName, maybeTokenWithHash(messageName));
-		setArenaStringPtr(proto, SayText2ProtoView::kParam1, entry.displayName);
-		setArenaStringPtr(proto, SayText2ProtoView::kParam2, entry.message);
-		setArenaStringPtr(proto, SayText2ProtoView::kParam3, location);
-		setArenaStringPtr(proto, SayText2ProtoView::kParam4, "");
-		*reinterpret_cast<bool*>(base + SayText2ProtoView::kChat) = true;
-		*reinterpret_cast<int32_t*>(base + SayText2ProtoView::kEntityIndex) = entry.entityIndex >= 0 ? entry.entityIndex : 0;
-
-		return true;
+		const auto payload = makeSayText2Payload(entry, messageName);
+		const bool ok = proto->ParseFromArray(payload.data(), static_cast<int>(payload.size()));
+		if (ok) {
+			advancedfx::Message("mirv_chat_insert: filled SayText2 protobuf object via MessageLite parse size=%zu.\n", payload.size());
+		} else {
+			advancedfx::Warning("mirv_chat_insert: MessageLite SayText2 protobuf parse failed size=%zu.\n", payload.size());
+		}
+		return ok;
 	}
 
 	using SayText2HandlerFn = void(__fastcall*)(void*, CNetMessage*);
@@ -2456,7 +2439,7 @@ bool applySyntheticChatMessage(const SyntheticChatMessage& entry) {
 	const bool handledSynchronously = ChatNative::dispatchViaNativeSayText2Handler(message);
 
 	advancedfx::Message(
-		"mirv_chat_insert: finished SayText2 direct entity=%i token=%s name=\"%s\" text=\"%s\" posted=%i.\n",
+		"mirv_chat_insert: finished SayText2 native entity=%i token=%s name=\"%s\" text=\"%s\" posted=%i.\n",
 		entry.entityIndex,
 		messageName.c_str(),
 		entry.displayName.c_str(),
@@ -2534,7 +2517,7 @@ void mirvChatInsert_PrintHelp(const char* arg0) {
 		"\t%s byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now\n"
 		"\tmirv_cmd addAtTick 12345 %s byXuid x76561197962023477 team=CT alive=1 visibility=team location=A_Ramp message rotate now\n"
 		"Notes:\n"
-		"\tThe command allocates native CUserMessageSayText2, fills the protobuf fields directly, then calls CS2's native SayText2 HUD handler.\n"
+		"\tThe command allocates native CUserMessageSayText2, parses a SayText2 protobuf payload into it, then calls CS2's native SayText2 HUD handler.\n"
 		"\tFor byXuid / byUserId, team=auto and omitted alive infer state from the current player controller and pawn.\n"
 		"\tUse mirv_cmd addAtTick / addAtTime to schedule insertion during demo playback.\n"
 		, arg0
