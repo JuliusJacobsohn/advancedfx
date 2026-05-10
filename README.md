@@ -1,5 +1,7 @@
 # Half-Life Advanced Effects - advancedfx
 
+Project-specific notes: [Demo Playback Player Customization](doc/demo_playback_player_customization_notes.md). These are the notes we are interested in for this branch, because this is where we diverge from the official HLAE repository.
+
 ## About
 
 Half-Life Advanced Effects (HLAE) is a tool to enrich content creation mainly for the Counter-Strike series.

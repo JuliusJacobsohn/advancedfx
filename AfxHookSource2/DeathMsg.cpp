@@ -889,6 +889,27 @@ struct CS2_MirvDeathMsgGlobals : MirvDeathMsgGlobals {
 typedef uint64_t (__fastcall *g_Original_getLocalSteamId_t)(void* param_1);
 g_Original_getLocalSteamId_t g_Original_getLocalSteamId = nullptr;
 
+typedef bool(__fastcall* CSGOAvatarImage_PopulateFromPlayerSlot_t)(void* This, int playerSlot);
+typedef void* (__fastcall* CSGOAvatarImage_MakeAvatarImageSource_t)(const char* steamId);
+typedef void* (__fastcall* CSGO_GetPlayerFromSlot_t)(int playerSlot);
+typedef uint64_t(__fastcall* CSGO_GetPlayerXuid_t)(void* player);
+typedef bool(__fastcall* CSGOAvatarImage_SetImageSource_t)(void* This, void* imageSource);
+typedef bool(__fastcall* CSGOAvatarImage_PopulateFromAvatarHandle_t)(void* This, unsigned short avatarHandle);
+
+extern CSGOAvatarImage_PopulateFromPlayerSlot_t g_Original_CSGOAvatarImage_PopulateFromPlayerSlot;
+extern CSGOAvatarImage_PopulateFromPlayerSlot_t g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative;
+extern CSGOAvatarImage_PopulateFromAvatarHandle_t g_Original_CSGOAvatarImage_PopulateFromAvatarHandle;
+extern CSGOAvatarImage_SetImageSource_t g_Original_CSGOAvatarImage_SetImageSource;
+extern CSGOAvatarImage_MakeAvatarImageSource_t g_CSGOAvatarImage_MakeAvatarImageSource;
+extern CSGO_GetPlayerFromSlot_t g_CSGO_GetPlayerFromSlot;
+extern CSGO_GetPlayerXuid_t g_CSGO_GetPlayerXuid;
+
+size_t relativeCallTarget(size_t instruction);
+bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlot(void* This, int playerSlot);
+bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlotNative(void* This, int playerSlot);
+bool __fastcall New_CSGOAvatarImage_PopulateFromAvatarHandle(void* This, unsigned short avatarHandle);
+bool __fastcall New_CSGOAvatarImage_SetImageSource(void* This, void* imageSource);
+
 uint64_t __fastcall getLocalSteamId(void* param_1) {
 	uint64_t result = 0;
 	MyDeathMsgPlayerEntry entry;
@@ -1297,6 +1318,37 @@ void getDeathMsgAddrs(HMODULE clientDll) {
 	};
 
 	g_Original_getLocalSteamId = (g_Original_getLocalSteamId_t)(g_Original_getLocalSteamId_addr);
+
+	size_t populateFromPlayerSlot = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 8B CA E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 0F 84 ?? ?? ?? ??");
+	if (0 == populateFromPlayerSlot) {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+	}
+	g_Original_CSGOAvatarImage_PopulateFromPlayerSlot = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlot;
+	g_CSGO_GetPlayerFromSlot = (CSGO_GetPlayerFromSlot_t)relativeCallTarget(populateFromPlayerSlot + 0x0f);
+
+	size_t populateFromPlayerSlotNative = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 8B CA E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 0F 84 ?? ?? ?? ?? 8B 90 F8 03 00 00 C1 EA 08 F6 C2 01");
+	if (0 == populateFromPlayerSlotNative) {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+	}
+	g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlotNative;
+
+	size_t populateFromAvatarHandle = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 0F B7 FA B8 FF FF 00 00 48 8B D9 66 3B F8");
+	if (0 == populateFromAvatarHandle) {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+	}
+	g_Original_CSGOAvatarImage_PopulateFromAvatarHandle = (CSGOAvatarImage_PopulateFromAvatarHandle_t)populateFromAvatarHandle;
+
+	size_t populateFromSteamId = getAddress(clientDll, "48 89 5C 24 10 57 48 83 EC 20 48 8B 02 48 8B D9 48 85 C0 48 8D 0D ?? ?? ?? ?? 48 8B FA 48 0F 45 C8 E8 ?? ?? ?? ??");
+	if (0 == populateFromSteamId) {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+	}
+	g_CSGOAvatarImage_MakeAvatarImageSource = (CSGOAvatarImage_MakeAvatarImageSource_t)relativeCallTarget(populateFromSteamId + 0x21);
+
+	size_t getPlayerXuidStringFromPlayerSlot = getAddress(clientDll, "40 53 48 83 EC 20 48 63 DA 8B CB E8 ?? ?? ?? ?? 48 85 C0 74 ?? 8B 88 F8 03 00 00 C1 E9 08 F6 C1 01");
+	if (0 == getPlayerXuidStringFromPlayerSlot) {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+	}
+	g_CSGO_GetPlayerXuid = (CSGO_GetPlayerXuid_t)relativeCallTarget(getPlayerXuidStringFromPlayerSlot + 0x2b);
 };
 
 bool getPanoramaAddrsFromClient(HMODULE clientDll) {
@@ -1515,6 +1567,9 @@ void HookDeathMsg(HMODULE clientDll) {
 
     DetourAttach(&(PVOID&)g_Original_handlePlayerDeath, handleDeathnotice);
     DetourAttach(&(PVOID&)g_Original_getLocalSteamId, getLocalSteamId);
+	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlot, New_CSGOAvatarImage_PopulateFromPlayerSlot);
+	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative, New_CSGOAvatarImage_PopulateFromPlayerSlotNative);
+	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromAvatarHandle, New_CSGOAvatarImage_PopulateFromAvatarHandle);
 
 	if(NO_ERROR != DetourTransactionCommit()) {
 		ErrorBox("Failed to detour DeathMsg functions.");
@@ -1873,6 +1928,143 @@ struct ScoreboardRankOverride {
 
 std::map<uint64_t, ScoreboardRankOverride> g_ScoreboardRankOverrides;
 
+struct AvatarOverride {
+	uint64_t replacementSteamId = 0;
+	bool use = false;
+};
+
+std::map<uint64_t, AvatarOverride> g_AvatarOverrides;
+
+CSGOAvatarImage_PopulateFromPlayerSlot_t g_Original_CSGOAvatarImage_PopulateFromPlayerSlot = nullptr;
+CSGOAvatarImage_PopulateFromPlayerSlot_t g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative = nullptr;
+CSGOAvatarImage_PopulateFromAvatarHandle_t g_Original_CSGOAvatarImage_PopulateFromAvatarHandle = nullptr;
+CSGOAvatarImage_SetImageSource_t g_Original_CSGOAvatarImage_SetImageSource = nullptr;
+CSGOAvatarImage_MakeAvatarImageSource_t g_CSGOAvatarImage_MakeAvatarImageSource = nullptr;
+CSGO_GetPlayerFromSlot_t g_CSGO_GetPlayerFromSlot = nullptr;
+CSGO_GetPlayerXuid_t g_CSGO_GetPlayerXuid = nullptr;
+std::map<void*, uint64_t> g_AvatarPanelReplacementByPanel;
+bool g_CSGOAvatarImage_SetImageSourceHookAttempted = false;
+
+size_t relativeCallTarget(size_t instruction)
+{
+	return instruction + 5 + *(int32_t*)(instruction + 1);
+}
+
+uint64_t getAvatarReplacementForPlayerSlot(int playerSlot, bool& playerKnown)
+{
+	constexpr uint64_t steamId64IndividualBase = 76561197960265728ULL;
+	playerKnown = false;
+	if (!g_CSGO_GetPlayerFromSlot || !g_CSGO_GetPlayerXuid) return 0;
+
+	void* player = g_CSGO_GetPlayerFromSlot(playerSlot);
+	if (!player) return 0;
+
+	const uint64_t xuid = g_CSGO_GetPlayerXuid(player);
+	if (0 == xuid) return 0;
+	playerKnown = true;
+
+	auto it = g_AvatarOverrides.find(xuid);
+	if (it == g_AvatarOverrides.end() && xuid < 0x100000000ULL) {
+		it = g_AvatarOverrides.find(steamId64IndividualBase + xuid);
+	}
+	if (it == g_AvatarOverrides.end() || !it->second.use) return 0;
+
+	return it->second.replacementSteamId;
+}
+
+bool makeAvatarImageSourceFromSteamId(uint64_t steamId, void*& imageSource)
+{
+	if (!g_CSGOAvatarImage_MakeAvatarImageSource) return false;
+
+	char steamIdString[32];
+	_snprintf_s(steamIdString, _TRUNCATE, "%llu", (unsigned long long)steamId);
+
+	imageSource = g_CSGOAvatarImage_MakeAvatarImageSource(steamIdString);
+	return nullptr != imageSource;
+}
+
+void ensureAvatarImageSourceHook(void* panel)
+{
+	if (g_CSGOAvatarImage_SetImageSourceHookAttempted || !panel) return;
+
+	g_CSGOAvatarImage_SetImageSourceHookAttempted = true;
+
+	auto vtable = *(void***)panel;
+	g_Original_CSGOAvatarImage_SetImageSource = (CSGOAvatarImage_SetImageSource_t)vtable[0x2a0 / sizeof(void*)];
+	if (!g_Original_CSGOAvatarImage_SetImageSource) return;
+
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_SetImageSource, New_CSGOAvatarImage_SetImageSource);
+	if (NO_ERROR != DetourTransactionCommit()) {
+		g_Original_CSGOAvatarImage_SetImageSource = (CSGOAvatarImage_SetImageSource_t)vtable[0x2a0 / sizeof(void*)];
+	}
+}
+
+bool setAvatarImageFromSteamId(void* panel, uint64_t steamId)
+{
+	if (!panel || !g_CSGOAvatarImage_MakeAvatarImageSource) return false;
+
+	void* imageSource = nullptr;
+	if (!makeAvatarImageSourceFromSteamId(steamId, imageSource)) return false;
+
+	auto vtable = *(void***)panel;
+	ensureAvatarImageSourceHook(panel);
+	auto setImageSource = (CSGOAvatarImage_SetImageSource_t)vtable[0x2a0 / sizeof(void*)];
+	return setImageSource(panel, &imageSource);
+}
+
+bool __fastcall New_CSGOAvatarImage_SetImageSource(void* This, void* imageSource)
+{
+	const auto it = g_AvatarPanelReplacementByPanel.find(This);
+	if (it != g_AvatarPanelReplacementByPanel.end()) {
+		void* replacementSource = nullptr;
+		if (makeAvatarImageSourceFromSteamId(it->second, replacementSource)) {
+			return g_Original_CSGOAvatarImage_SetImageSource(This, &replacementSource);
+		}
+	}
+
+	return g_Original_CSGOAvatarImage_SetImageSource(This, imageSource);
+}
+
+bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlot(void* This, int playerSlot)
+{
+	bool playerKnown = false;
+	const uint64_t replacementSteamId = getAvatarReplacementForPlayerSlot(playerSlot, playerKnown);
+	if (replacementSteamId) {
+		g_AvatarPanelReplacementByPanel[This] = replacementSteamId;
+		setAvatarImageFromSteamId(This, replacementSteamId);
+		return true;
+	}
+
+	if (playerKnown) g_AvatarPanelReplacementByPanel.erase(This);
+	return g_Original_CSGOAvatarImage_PopulateFromPlayerSlot(This, playerSlot);
+}
+
+bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlotNative(void* This, int playerSlot)
+{
+	bool playerKnown = false;
+	const uint64_t replacementSteamId = getAvatarReplacementForPlayerSlot(playerSlot, playerKnown);
+	if (replacementSteamId) {
+		g_AvatarPanelReplacementByPanel[This] = replacementSteamId;
+		setAvatarImageFromSteamId(This, replacementSteamId);
+		return true;
+	}
+
+	if (playerKnown) g_AvatarPanelReplacementByPanel.erase(This);
+	return g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative(This, playerSlot);
+}
+
+bool __fastcall New_CSGOAvatarImage_PopulateFromAvatarHandle(void* This, unsigned short avatarHandle)
+{
+	const auto it = g_AvatarPanelReplacementByPanel.find(This);
+	if (it != g_AvatarPanelReplacementByPanel.end() && setAvatarImageFromSteamId(This, it->second)) {
+		return true;
+	}
+
+	return g_Original_CSGOAvatarImage_PopulateFromAvatarHandle(This, avatarHandle);
+}
+
 bool parseXuidArg(const char* arg, uint64_t& outXuid) {
 	if (nullptr == arg || arg[0] == '\0') return false;
 	outXuid = StringIBeginsWith(arg, "x") ? strtoull(arg + 1, nullptr, 10) : strtoull(arg, nullptr, 10);
@@ -2094,6 +2286,281 @@ CON_COMMAND(mirv_scoreboard_rank, "Visually overrides scoreboard rank / Premier 
 	}
 
 	mirvScoreboardRank_PrintHelp(arg0);
+}
+
+u_char* findAvatarContextPanel() {
+	auto hudPanel = g_myPanoramaWrapper.getHudPanel();
+	if (!hudPanel) return nullptr;
+	return hudPanel;
+}
+
+bool applyAvatarOverrides() {
+	auto contextPanel = findAvatarContextPanel();
+	if (!contextPanel) return false;
+
+	std::map<uint64_t, std::string> topHudPanelIds;
+	if (g_pEntityList && *g_pEntityList && g_GetEntityFromIndex) {
+		int ctIndex = 0;
+		int tIndex = 0;
+		const int highestIndex = GetHighestEntityIndex();
+		for (int i = 0; i <= highestIndex; ++i) {
+			auto ent = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, i);
+			if (!ent || !ent->IsPlayerController()) continue;
+
+			const uint64_t xuid = *(uint64_t*)((u_char*)(ent) + g_clientDllOffsets.CBasePlayerController.m_steamID);
+			const int teamNumber = *(int*)((u_char*)(ent) + g_clientDllOffsets.C_BaseEntity.m_iTeamNum);
+			if (teamNumber == 3) {
+				topHudPanelIds[xuid] = std::string("Avatar") + std::to_string(ctIndex++);
+			}
+			else if (teamNumber == 2) {
+				topHudPanelIds[xuid] = std::string("Avatar") + std::to_string(10 + tIndex++);
+			}
+		}
+	}
+
+	std::ostringstream script;
+	script
+		<< "(function(){"
+		<< "var root=$.GetContextPanel();"
+		<< "if(!root||!root.IsValid||!root.IsValid())return;"
+		<< "var data={";
+
+	bool first = true;
+	for (const auto& entry : g_AvatarOverrides) {
+		if (!entry.second.use) continue;
+		if (!first) script << ",";
+		first = false;
+		script
+			<< "'" << entry.first << "':{steamid:'" << entry.second.replacementSteamId << "'";
+		auto hudIt = topHudPanelIds.find(entry.first);
+		if (hudIt != topHudPanelIds.end()) {
+			script << ",hud:'" << jsEscapeSingleQuotedString(hudIt->second) << "'";
+		}
+		script << "}";
+	}
+
+	script
+		<< "};"
+		<< "root.Data().mirvAvatarOverrides=data;"
+		<< "var applyAvatar=function(panel,replacement){"
+		<< "if(!panel||!panel.IsValid||!panel.IsValid()||!replacement)return false;"
+		<< "if(typeof panel.PopulateFromSteamID==='function'){panel.PopulateFromSteamID(replacement);panel.Data().mirvAvatarReplacementSteamId=replacement;return true;}"
+		<< "return false;"
+		<< "};"
+		<< "var findAvatarImage=function(panel){"
+		<< "if(!panel||!panel.IsValid||!panel.IsValid())return null;"
+		<< "try{if(typeof panel.PopulateFromSteamID==='function')return panel;}catch(e){}"
+		<< "var children=[];try{children=panel.Children?panel.Children():[];}catch(e){}"
+		<< "for(var i=0;i<children.length;++i){var found=findAvatarImage(children[i]);if(found)return found;}"
+		<< "return null;"
+		<< "};"
+		<< "var xuidFromPanel=function(panel){"
+		<< "for(var p=panel,depth=0;p&&depth<8;p=p.GetParent?p.GetParent():null,++depth){"
+		<< "try{var id=p.id||'';if(id.indexOf('player-')===0)return id.substring(7);}catch(e){}"
+		<< "try{var x=p.GetAttributeString?p.GetAttributeString('xuid',''):'';if(x)return x;}catch(e){}"
+		<< "try{x=p.GetAttributeString?p.GetAttributeString('steamid',''):'';if(x)return x;}catch(e){}"
+		<< "try{x=p.GetAttributeString?p.GetAttributeString('steamid64',''):'';if(x)return x;}catch(e){}"
+		<< "try{var s=p.GetAttributeInt?p.GetAttributeInt('player_slot',-1):-1;if(s>=0&&typeof GameStateAPI!=='undefined')return GameStateAPI.GetPlayerXuidStringFromPlayerSlot(s);}catch(e){}"
+		<< "try{s=p.GetAttributeInt?p.GetAttributeInt('slot',-1):-1;if(s>=0&&typeof GameStateAPI!=='undefined')return GameStateAPI.GetPlayerXuidStringFromPlayerSlot(s);}catch(e){}"
+		<< "}"
+		<< "return '';"
+		<< "};"
+		<< "var walk=function(panel){"
+		<< "if(!panel||!panel.IsValid||!panel.IsValid())return;"
+		<< "try{if(typeof panel.PopulateFromSteamID==='function'){var x=xuidFromPanel(panel);if(x&&data[x])applyAvatar(panel,data[x].steamid);}}catch(e){}"
+		<< "var children=[];try{children=panel.Children?panel.Children():[];}catch(e){}"
+		<< "for(var i=0;i<children.length;++i)walk(children[i]);"
+		<< "};"
+		<< "var apply=function(){"
+		<< "var root=$.GetContextPanel();"
+		<< "if(!root||!root.IsValid||!root.IsValid())return;"
+		<< "var overrides=root.Data().mirvAvatarOverrides||{};"
+		<< "var scoreboard=$('#Scoreboard')||(root.FindChildTraverse?root.FindChildTraverse('Scoreboard'):null);"
+		<< "for(var xuid in overrides){"
+		<< "var o=overrides[xuid];"
+		<< "var replacement=o&&o.steamid;"
+		<< "var row=scoreboard&&scoreboard.FindChildTraverse?scoreboard.FindChildTraverse('player-'+xuid):null;"
+		<< "if(row&&row.IsValid&&row.IsValid()){applyAvatar(findAvatarImage(row),replacement);}"
+		<< "if(o&&o.hud){var hudPanel=root.FindChildTraverse?root.FindChildTraverse(o.hud):null;if(hudPanel&&hudPanel.IsValid&&hudPanel.IsValid()){applyAvatar(findAvatarImage(hudPanel),replacement);}}"
+		<< "}"
+		<< "try{if(scoreboard&&scoreboard.IsValid&&scoreboard.IsValid()&&!scoreboard.Data().mirvAvatarScoreboardHooked){scoreboard.Data().mirvAvatarScoreboardHooked=true;$.RegisterEventHandler('Scoreboard_UpdateJob',scoreboard,function(){$.Schedule(0.0,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});$.RegisterEventHandler('OnOpenScoreboard',scoreboard,function(){$.Schedule(0.05,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});}}catch(e){}"
+		<< "walk(root);"
+		<< "};"
+		<< "root.Data().mirvAvatarApply=apply;"
+		<< "if(!root.Data().mirvAvatarHooked){"
+		<< "root.Data().mirvAvatarHooked=true;"
+		<< "$.RegisterEventHandler('Scoreboard_UpdateJob',root,function(){$.Schedule(0.0,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});"
+		<< "$.RegisterEventHandler('OnOpenScoreboard',root,function(){$.Schedule(0.05,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});"
+		<< "var loop=function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();$.Schedule(0.5,loop);};"
+		<< "$.Schedule(0.5,loop);"
+		<< "}"
+		<< "apply();"
+		<< "})();";
+
+	return g_myPanoramaWrapper.runScript(contextPanel, script.str().c_str());
+}
+
+bool inspectAvatarPanels() {
+	auto contextPanel = findAvatarContextPanel();
+	if (!contextPanel) return false;
+
+	std::ostringstream script;
+	script
+		<< "(function(){"
+		<< "var root=$.GetContextPanel();"
+		<< "if(!root||!root.IsValid||!root.IsValid()){ $.Msg('mirv_avatar inspect: no valid root'); return; }"
+		<< "var count=0;"
+		<< "var describe=function(panel){"
+		<< "var path=[];"
+		<< "for(var p=panel,depth=0;p&&depth<8;p=p.GetParent?p.GetParent():null,++depth){path.unshift((p.paneltype||'?')+'#'+(p.id||''));}"
+		<< "var attrs=[];"
+		<< "['xuid','steamid','steamid64','player_slot','slot','player-slot','data-player-slot','team','name'].forEach(function(k){"
+		<< "try{var v=panel.GetAttributeString?panel.GetAttributeString(k,''):'';if(v!=='')attrs.push(k+'='+v);}catch(e){}"
+		<< "try{var i=panel.GetAttributeInt?panel.GetAttributeInt(k,-999999):-999999;if(i!==-999999&&i!==-1)attrs.push(k+'='+i);}catch(e){}"
+		<< "});"
+		<< "$.Msg('mirv_avatar inspect: '+path.join(' > ')+' attrs=['+attrs.join(',')+']');"
+		<< "};"
+		<< "var walk=function(panel){"
+		<< "if(!panel||!panel.IsValid||!panel.IsValid())return;"
+		<< "try{if(panel.paneltype==='CSGOAvatarImage'||/(^|[^a-z])avatar([^a-z]|$)/i.test((panel.id||'')+' '+(panel.paneltype||''))){++count;describe(panel);}}catch(e){}"
+		<< "var children=[];try{children=panel.Children?panel.Children():[];}catch(e){}"
+		<< "for(var i=0;i<children.length;++i)walk(children[i]);"
+		<< "};"
+		<< "walk(root);"
+		<< "$.Msg('mirv_avatar inspect: found '+count+' avatar-like panel(s)');"
+		<< "})();";
+
+	return g_myPanoramaWrapper.runScript(contextPanel, script.str().c_str());
+}
+
+void mirvAvatar_PrintHelp(const char* arg0) {
+	advancedfx::Message(
+		"%s byXuid add x<targetSteamID64> steamid x<avatarSteamID64>\n"
+		"%s byXuid remove x<targetSteamID64>\n"
+		"%s clear\n"
+		"%s print\n"
+		"%s apply\n"
+		"%s inspect\n"
+		"Notes:\n"
+		"\tThis prototype visually repopulates Panorama CSGOAvatarImage panels from another SteamID.\n"
+		"\tIt does not modify the demo or globally change the target player's identity.\n"
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+		, arg0
+	);
+}
+
+CON_COMMAND(mirv_avatar, "Visually overrides CS2 player avatars during demo playback.")
+{
+	const auto arg0 = args->ArgV(0);
+	const auto argc = args->ArgC();
+
+	if (2 <= argc) {
+		const auto arg1 = args->ArgV(1);
+
+		if (0 == _stricmp("byXuid", arg1)) {
+			if (3 <= argc) {
+				const auto arg2 = args->ArgV(2);
+
+				if (0 == _stricmp("add", arg2)) {
+					if (6 <= argc) {
+						uint64_t targetXuid = 0;
+						if (!parseXuidArg(args->ArgV(3), targetXuid)) {
+							advancedfx::Warning("mirv_avatar: invalid target XUID: %s\n", args->ArgV(3));
+							return;
+						}
+
+						if (0 != _stricmp("steamid", args->ArgV(4)) && 0 != _stricmp("fromSteamId", args->ArgV(4))) {
+							advancedfx::Warning("mirv_avatar: expected steamid x<avatarSteamID64>.\n");
+							return;
+						}
+
+						uint64_t avatarXuid = 0;
+						if (!parseXuidArg(args->ArgV(5), avatarXuid)) {
+							advancedfx::Warning("mirv_avatar: invalid avatar SteamID: %s\n", args->ArgV(5));
+							return;
+						}
+
+						AvatarOverride entry;
+						entry.replacementSteamId = avatarXuid;
+						entry.use = true;
+						g_AvatarOverrides[targetXuid] = entry;
+						applyAvatarOverrides();
+						return;
+					}
+				}
+				else if (0 == _stricmp("remove", arg2)) {
+					if (4 <= argc) {
+						uint64_t targetXuid = 0;
+						if (!parseXuidArg(args->ArgV(3), targetXuid)) {
+							advancedfx::Warning("mirv_avatar: invalid target XUID: %s\n", args->ArgV(3));
+							return;
+						}
+
+						g_AvatarOverrides.erase(targetXuid);
+						g_AvatarPanelReplacementByPanel.clear();
+						applyAvatarOverrides();
+						return;
+					}
+				}
+			}
+
+			mirvAvatar_PrintHelp(arg0);
+			return;
+		}
+
+		if (0 == _stricmp("clear", arg1)) {
+			g_AvatarOverrides.clear();
+			g_AvatarPanelReplacementByPanel.clear();
+			applyAvatarOverrides();
+			return;
+		}
+
+		if (0 == _stricmp("print", arg1)) {
+			for (const auto& entry : g_AvatarOverrides) {
+				std::map<uint64_t, std::string> topHudPanelIds;
+				if (g_pEntityList && *g_pEntityList && g_GetEntityFromIndex) {
+					int ctIndex = 0;
+					int tIndex = 0;
+					const int highestIndex = GetHighestEntityIndex();
+					for (int i = 0; i <= highestIndex; ++i) {
+						auto ent = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, i);
+						if (!ent || !ent->IsPlayerController()) continue;
+
+						const uint64_t xuid = *(uint64_t*)((u_char*)(ent) + g_clientDllOffsets.CBasePlayerController.m_steamID);
+						const int teamNumber = *(int*)((u_char*)(ent) + g_clientDllOffsets.C_BaseEntity.m_iTeamNum);
+						if (teamNumber == 3) {
+							topHudPanelIds[xuid] = std::string("Avatar") + std::to_string(ctIndex++);
+						}
+						else if (teamNumber == 2) {
+							topHudPanelIds[xuid] = std::string("Avatar") + std::to_string(10 + tIndex++);
+						}
+					}
+				}
+				advancedfx::Message(
+					"x%llu steamid x%llu hud=%s\n",
+					(unsigned long long)entry.first,
+					(unsigned long long)entry.second.replacementSteamId,
+					topHudPanelIds[entry.first].c_str());
+			}
+			return;
+		}
+
+		if (0 == _stricmp("apply", arg1)) {
+			applyAvatarOverrides();
+			return;
+		}
+
+		if (0 == _stricmp("inspect", arg1)) {
+			inspectAvatarPanels();
+			return;
+		}
+	}
+
+	mirvAvatar_PrintHelp(arg0);
 }
 
 struct SyntheticChatMessage {

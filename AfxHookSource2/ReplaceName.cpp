@@ -23,6 +23,15 @@ std::map<uint64_t,std::string> g_SteamId_To_ReplaceName;
 std::map<int,std::string> g_Index_To_DecoratedReplaceName;
 std::map<uint64_t,std::string> g_SteamId_To_DecoratedReplaceName;
 
+std::string JoinArgs(advancedfx::ICommandArgs* args, int startIndex) {
+    std::string result;
+    for (int i = startIndex; i < args->ArgC(); ++i) {
+        if (!result.empty()) result.push_back(' ');
+        result.append(args->ArgV(i));
+    }
+    return result;
+}
+
 const char* GetReplaceNameOverride(int controllerIndex, uint64_t steamId) {
     if (!g_Index_To_ReplaceName.empty()) {
         auto it = g_Index_To_ReplaceName.find(controllerIndex);
@@ -159,7 +168,7 @@ CON_COMMAND(mirv_replace_name, "Replace player names")
             if(3 <= argC) {
                 const char * arg2 = args->ArgV(2);
                 if(0 == stricmp("add", arg2) && 5 <= argC) {
-                    g_Index_To_ReplaceName[atoi(args->ArgV(3))+1] = args->ArgV(4);
+                    g_Index_To_ReplaceName[atoi(args->ArgV(3))+1] = JoinArgs(args, 4);
                     return;
                 }
                 else if(0 == stricmp("remove", arg2) && 4 <= argC) {
@@ -188,7 +197,7 @@ CON_COMMAND(mirv_replace_name, "Replace player names")
                 if(0 == stricmp("add", arg2) && 5 <= argC) {
                     const char * arg3 = args->ArgV(3);
                     if(StringIBeginsWith(arg3,"x")) arg3++;
-                    g_SteamId_To_ReplaceName[strtoull(arg3,nullptr,10)] = args->ArgV(4);
+                    g_SteamId_To_ReplaceName[strtoull(arg3,nullptr,10)] = JoinArgs(args, 4);
                     return;
                 }
                 else if(0 == stricmp("remove", arg2) && 4 <= argC) {
@@ -226,7 +235,7 @@ CON_COMMAND(mirv_replace_name, "Replace player names")
             if(3 <= argC) {
                 const char * arg2 = args->ArgV(2);
                 if(0 == stricmp("add", arg2) && 5 <= argC) {
-                    g_Index_To_DecoratedReplaceName[atoi(args->ArgV(3))+1] = args->ArgV(4);
+                    g_Index_To_DecoratedReplaceName[atoi(args->ArgV(3))+1] = JoinArgs(args, 4);
                     return;
                 }
                 else if(0 == stricmp("remove", arg2) && 4 <= argC) {
@@ -255,7 +264,7 @@ CON_COMMAND(mirv_replace_name, "Replace player names")
                 if(0 == stricmp("add", arg2) && 5 <= argC) {
                     const char * arg3 = args->ArgV(3);
                     if(StringIBeginsWith(arg3,"x")) arg3++;
-                    g_SteamId_To_DecoratedReplaceName[strtoull(arg3,nullptr,10)] = args->ArgV(4);
+                    g_SteamId_To_DecoratedReplaceName[strtoull(arg3,nullptr,10)] = JoinArgs(args, 4);
                     return;
                 }
                 else if(0 == stricmp("remove", arg2) && 4 <= argC) {
