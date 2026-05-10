@@ -14,7 +14,6 @@ The command inserts exactly one synthetic row into CS2's normal closed chat feed
 mirv_chat_insert byXuid x<steamid64> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
 mirv_chat_insert byUserId <id> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
 mirv_chat_insert name <displayName> [team=auto|T|CT|spec|none] [alive=0|1] [visibility=all|team] [location=<string>|none] message <text...>
-mirv_chat_insert clear
 mirv_chat_insert inspect
 ```
 
@@ -37,7 +36,7 @@ Options:
 Utility commands:
 
 - `mirv_chat_insert inspect` checks whether the HUD chat panel, `NetworkMessagesVersion001`, `SayText2`, and the native SayText2 handler can be found. It does not insert a message.
-- `mirv_chat_insert clear` is intentionally disabled. The rejected fake `ChatHistoryText` path had something to clear; native CS2 chat rows are owned by the game HUD.
+- A legacy `mirv_chat_insert clear` subcommand is intentionally disabled. The rejected fake `ChatHistoryText` path had something to clear; native CS2 chat rows are owned by the game HUD.
 
 Direct examples:
 

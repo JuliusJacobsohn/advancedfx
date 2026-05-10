@@ -124,17 +124,13 @@ Print scheduled commands:
 mirv_cmd print
 ```
 
-Clear scheduled commands:
-
-```text
-mirv_cmd clear
-```
-
-Example launch command that clears the schedule, schedules an HLAE command one second into demo playback, prints the schedule, and loads the demo:
+Example launch command that schedules an HLAE command one second into demo playback, prints the schedule, and loads the demo:
 
 ```powershell
-$cmd = "-steam -insecure -console -condebug -novid +mirv_cmd clear +mirv_cmd addAtTime 1 __mirv_info +mirv_cmd print +playdemo replays/match730_003816038387630997543_1135542072_274.dem"
+$cmd = "-steam -insecure -console -condebug -novid +mirv_cmd addAtTime 1 __mirv_info +mirv_cmd print +playdemo replays/match730_003816038387630997543_1135542072_274.dem"
 ```
+
+Keep scheduled `+mirv_cmd ...` launch commands before `+playdemo`. In local CS2 1.41.6.0 testing, putting scheduled commands after `+playdemo` printed them in the `[CommandLine]` log but did not reliably execute the schedule.
 
 For feature tests, replace `__mirv_info` with the command under test, for example:
 
@@ -178,6 +174,8 @@ Useful success markers:
 ```
 
 If a scheduled HLAE command such as `__mirv_info` runs after demo activation, the log should show another `AfxHookSource2` banner after the `Host activate: Playing Demo` line.
+
+If HLAE shows `AfxHook error` code `13` / `DLL can't be loaded`, check that the x64 hook directory contains the runtime DLLs copied by the normal install, especially `Iex-3_3.dll`, `IlmThread-3_3.dll`, `Imath-3_1.dll`, `OpenEXR-3_3.dll`, and `OpenEXRCore-3_3.dll`. This is easy to miss when manually copying only `AfxHookSource2.dll` into a temporary clean dist. The normal `build\Release\dist\bin\x64` install output includes these files.
 
 ## Notes
 
