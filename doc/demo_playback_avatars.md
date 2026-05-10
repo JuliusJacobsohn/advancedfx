@@ -97,7 +97,7 @@ Panorama support:
 
 - `applyAvatarOverrides()` stores override data on the HUD root panel.
 - It applies replacements to scoreboard rows and top team-counter avatar panels by calling the real `PopulateFromSteamID` method on existing `CSGOAvatarImage` panels.
-- It registers scoreboard open/update handlers and has a conservative scheduled reapply loop for Panorama-created/rebuilt panels.
+- It registers scoreboard open/update handlers for Panorama-created/rebuilt scoreboard panels.
 - This is not an overlay. It repopulates existing native `CSGOAvatarImage` panels.
 
 Cleanup:
@@ -161,7 +161,6 @@ Good enough for local fragmovie/demo-render use, but still prototype-shaped for 
 Before upstreaming, consider:
 
 - Move avatar code out of `DeathMsg.cpp`.
-- Reduce or remove the Panorama scheduled reapply loop if native coverage can be made complete enough.
 - Resolve the image-source setter deterministically instead of installing that detour lazily from a live panel vtable.
 - Harden raw panel pointer tracking against panel destruction/recreation and pointer reuse.
 - Retest after CS2 updates and across more demos, teams, scoreboard states, spectator states, and `remove`/`clear` flows.

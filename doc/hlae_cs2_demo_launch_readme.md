@@ -180,3 +180,4 @@ If a scheduled HLAE command such as `__mirv_info` runs after demo activation, th
 - Avoid PowerShell TCP/netcon scripts for this workflow. Windows Defender can flag that pattern. Launch-time `+commands`, cfg files, and `mirv_cmd` scheduling are enough for repeatable demo tests.
 - Keep `-insecure` in every automated launch command.
 - `console.log` is appended/rewritten by CS2 depending on launch behavior. Check timestamps when comparing multiple test runs.
+- On this workstation, CS2 opens on the left/main screen. Automated screenshot captures should capture that screen only; full virtual-desktop screenshots include unrelated right-screen desktop/editor state and make visual inspection harder.

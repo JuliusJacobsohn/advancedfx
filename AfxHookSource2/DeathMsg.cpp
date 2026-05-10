@@ -2391,8 +2391,6 @@ bool applyAvatarOverrides() {
 		<< "root.Data().mirvAvatarHooked=true;"
 		<< "$.RegisterEventHandler('Scoreboard_UpdateJob',root,function(){$.Schedule(0.0,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});"
 		<< "$.RegisterEventHandler('OnOpenScoreboard',root,function(){$.Schedule(0.05,function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();});});"
-		<< "var loop=function(){var r=$.GetContextPanel();if(r&&r.IsValid&&r.IsValid()&&r.Data().mirvAvatarApply)r.Data().mirvAvatarApply();$.Schedule(0.5,loop);};"
-		<< "$.Schedule(0.5,loop);"
 		<< "}"
 		<< "apply();"
 		<< "})();";
