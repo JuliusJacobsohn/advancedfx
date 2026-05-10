@@ -58,6 +58,7 @@ struct ClientDllOffsets_t {
 
 	struct CCSPlayerController {
 		ptrdiff_t m_sSanitizedPlayerName = 0; // CUtlString
+		ptrdiff_t m_iCompTeammateColor = 0; // int32
 	} CCSPlayerController;
 
 	struct C_BasePlayerPawn {

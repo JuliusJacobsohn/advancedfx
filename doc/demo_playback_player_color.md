@@ -1,6 +1,6 @@
 # Demo Playback Player Color
 
-Status: researched, not implemented.
+Status: implemented native controller-field prototype.
 
 This means the player color used for avatar frame, scoreboard row indicator, radar/minimap/team indicators, and similar UI surfaces.
 
@@ -10,31 +10,41 @@ Current CS2 tracking shows:
 - Generic/lobby avatar panels call `PartyListAPI.GetPartyMemberSetting(xuid, 'game/teamcolor')`, convert it through `TeamColor.GetTeamColor`, and write that into `JsAvatarTeamColor`.
 - Client schema exposes `CCSPlayerController::m_iCompTeammateColor`.
 
-Likely command shape:
+Current command:
 
 ```text
-mirv_player_color byXuid add x<steamid64> yellow|purple|green|blue|orange|<0-4>
+mirv_player_color byXuid add x<steamid64> blue|green|yellow|orange|purple|<0-4>
 mirv_player_color byXuid remove x<steamid64>
 mirv_player_color clear
 mirv_player_color print
 mirv_player_color apply
+mirv_player_color inspect
 ```
 
-Likely implementation:
+Implementation:
 
-1. Add `CCSPlayerController::m_iCompTeammateColor` to schema offsets.
-2. Store overrides by XUID.
-3. Enumerate player controllers, match `GetSteamId()`, and write the color index.
-4. Reapply during demo playback because demo/client updates may restore original values.
+- Adds `CCSPlayerController::m_iCompTeammateColor` to schema offsets.
+- Stores overrides by XUID.
+- Enumerates player controllers, matches `GetSteamId()`, and writes the color index.
+- Applies immediately when adding an override during active demo playback, and can be reapplied manually with `mirv_player_color apply`.
+- `inspect` prints current controller XUIDs, color field values, names, and whether an override is configured.
 
-Color index mapping:
+Visible color index mapping verified with the Inferno test demo:
 
 ```text
-0 -> cl_teammate_color_1
-1 -> cl_teammate_color_2
-2 -> cl_teammate_color_3
-3 -> cl_teammate_color_4
-4 -> cl_teammate_color_5
+0 -> blue / cyan
+1 -> green
+2 -> yellow
+3 -> orange
+4 -> purple / pink
 ```
 
-In normal CS2 settings these correspond to yellow, purple, green, blue, and orange, but the actual RGB values come from client cvars.
+The command names map to the verified visible colors. Raw numeric values still write the raw controller field value.
+
+Verification:
+
+- Built `AfxHookSource2` with the local x64 target. The DLL was emitted directly to `build\Release\dist\bin\x64\AfxHookSource2.dll`.
+- Launched the documented Inferno demo through HLAE with Wladimir Putin renamed to `MS Word`, `mirv_player_color byXuid add x76561197960680616 purple`, and a team chat message `hi team` at the demo start.
+- Screenshot one second after the chat insert showed the chat color dot as purple/pink and the player renamed to `MS Word`.
+- A follow-up test with the frame-stage reapply disabled still showed the requested purple/pink chat dot, so the implementation does not use a per-frame color write.
+- The test harness used scheduled `quit`; do not schedule `demo_pause` for this test because it can leave playback appearing stuck if the user presses play near that scheduled tick.

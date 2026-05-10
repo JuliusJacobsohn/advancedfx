@@ -52,10 +52,11 @@ $env:PATH = "C:\Program Files\CMake\bin;$env:USERPROFILE\.cargo\bin;$env:USERPRO
 
 Set-Location build\Release\advancedfx-x64
 & "C:\Program Files\CMake\bin\cmake.exe" --build . --config Release --target AfxHookSource2 -- /m:1 -r
-
-Set-Location ..\..\..
-Copy-Item -Force "build\Release\advancedfx-x64\AfxHookSource2\Release\AfxHookSource2.dll" "build\Release\dist\bin\x64\AfxHookSource2.dll"
 ```
+
+In this local multibuild layout, the x64 `AfxHookSource2` target writes the
+rebuilt hook directly to `build\Release\dist\bin\x64\AfxHookSource2.dll` and
+its PDB to `build\Release\dist\pdb\x64\AfxHookSource2.pdb`.
 
 Use the full top-level build/install only when installer, package, or shared
 dependency output changed. If MSVC reports `C1041` for a shared PDB during a

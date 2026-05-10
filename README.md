@@ -38,6 +38,16 @@ https://github.com/advancedfx/advancedfx/releases
 
 Using Steam's offline mode you can avoid retrieving updates that break HLAE during video production.
 
+## Current development notes
+
+This branch includes CS2 demo playback player customization work:
+
+* Demo player name replacement.
+* Synthetic demo chat insertion.
+* Demo teammate color overrides through `mirv_player_color`.
+
+See [doc/demo_playback_player_customization_notes.md](doc/demo_playback_player_customization_notes.md) and [doc/demo_playback_player_color.md](doc/demo_playback_player_color.md) for current status, test notes, and remaining follow-up work.
+
 ## Support
 
 Please keep in mind, that even though we accept donations, HLAE is free software and a hobby for most in the HLAE team.

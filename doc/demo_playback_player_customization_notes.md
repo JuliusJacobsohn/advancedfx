@@ -18,7 +18,7 @@ Current implementation status:
 | Names | Done | Runtime `mirv_replace_name` hooks work for HUD/UI name lookups; death notices are handled through `mirv_deathmsg`. |
 | Ranks | Done | Scoreboard visual rank overrides work through `mirv_scoreboard_rank`; other rank surfaces would be separate follow-up work. |
 | Synthetic chat | Done | `mirv_chat_insert` inserts native all/team chat rows through CS2's real closed-chat feed and can be scheduled with `mirv_cmd`. |
-| Player color | Notes only | Intended as a visual override topic; implementation details are tracked separately. |
+| Player color | Prototype verified | `mirv_player_color` writes `CCSPlayerController::m_iCompTeammateColor`; verified for HUD/chat color in the Inferno test demo. |
 | Avatars | Notes only | Intended as a visual override topic; implementation details are tracked separately. |
 | Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
 
@@ -28,6 +28,12 @@ Shared implementation constraints:
 - Prefer UI/Panorama or client-side render overrides over network, GC, or inventory mutation.
 - Commands should accept explicit values. SteamID64/XUID is useful for targeting, not for retrieving private/current matchmaking data.
 - A feature is successful when captured video output looks correct.
+
+Current follow-up work:
+
+- Re-test player color overrides on more demos, maps, teams, and spectator states.
+- Decide whether `mirv_player_color` should be part of an official upstream PR or kept with the broader demo-customization branch.
+- Keep avatar and weapon skin customization as separate follow-up topics.
 
 Shared repo building blocks:
 

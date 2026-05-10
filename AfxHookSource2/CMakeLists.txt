@@ -49,6 +49,16 @@ add_custom_target(AfxHookSource2Shaders
 
 add_library(${PROJECT_NAME} MODULE)
 
+if(PROJECT_NAME_MULTI AND CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+    cmake_path(GET CMAKE_BINARY_DIR PARENT_PATH AFX_LOCAL_BUILD_ROOT)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${AFX_LOCAL_BUILD_ROOT}/dist/bin/x64"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${AFX_LOCAL_BUILD_ROOT}/dist/bin/x64"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${AFX_LOCAL_BUILD_ROOT}/dist/lib/x64"
+        PDB_OUTPUT_DIRECTORY_RELEASE "${AFX_LOCAL_BUILD_ROOT}/dist/pdb/x64"
+    )
+endif()
+
 add_dependencies(${PROJECT_NAME}
     OpenEXR
     AfxHookSource2Shaders
@@ -257,6 +267,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 	MirvTime.cpp
 	MirvTime.h
+
+    PlayerColor.cpp
 
     ReplaceName.cpp
     ReplaceName.h
