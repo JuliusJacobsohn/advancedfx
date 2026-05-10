@@ -175,8 +175,6 @@ Useful success markers:
 
 If a scheduled HLAE command such as `__mirv_info` runs after demo activation, the log should show another `AfxHookSource2` banner after the `Host activate: Playing Demo` line.
 
-If HLAE shows `AfxHook error` code `13` / `DLL can't be loaded`, check that the x64 hook directory contains the runtime DLLs copied by the normal install, especially `Iex-3_3.dll`, `IlmThread-3_3.dll`, `Imath-3_1.dll`, `OpenEXR-3_3.dll`, and `OpenEXRCore-3_3.dll`. This is easy to miss when manually copying only `AfxHookSource2.dll` into a temporary clean dist. The normal `build\Release\dist\bin\x64` install output includes these files.
-
 ## Notes
 
 - Avoid PowerShell TCP/netcon scripts for this workflow. Windows Defender can flag that pattern. Launch-time `+commands`, cfg files, and `mirv_cmd` scheduling are enough for repeatable demo tests.
