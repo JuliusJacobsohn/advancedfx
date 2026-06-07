@@ -12,6 +12,7 @@
 #include "ReShadeAdvancedfx.h"
 #include "CamIO.h"
 #include "ViewModel.h"
+#include "DemoAgent.h"
 #include "Globals.h"
 #include "DeathMsg.h"
 #include "ReplaceName.h"
@@ -1511,6 +1512,7 @@ void  new_CS2_Client_FrameStageNotify(void* This, SOURCESDK::CS2::ClientFrameSta
 	old_CS2_Client_FrameStageNotify(This, curStage);
 
 	AfxHookSource2Rs_Engine_OnClientFrameStageNotify(curStage, false);
+	DemoAgent_OnClientFrameStageNotify((int)curStage, true);
 
 	AfxHookSource2Rs_Engine_RunJobQueue();
 }
@@ -2149,6 +2151,8 @@ void LibraryHooksW(HMODULE hModule, LPCWSTR lpLibFileName)
 		HookMirvCommands(hModule);
 
 		HookViewmodel(hModule);
+
+		HookDemoAgent(hModule);
 
 		HookDeathMsg(hModule);
 

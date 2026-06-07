@@ -22,12 +22,30 @@ struct ClientDllOffsets_t {
 		ptrdiff_t m_pEntity = 0; // CEntityIdentity*
 	} CEntityInstance;
 
+	struct CEntityIdentity {
+		ptrdiff_t m_flags = 0; // uint32
+	} CEntityIdentity;
+
 	struct C_BaseEntity {
+		ptrdiff_t m_CBodyComponent = 0; // CBodyComponent*
 		ptrdiff_t m_pGameSceneNode = 0; // CGameSceneNode*
 		ptrdiff_t m_iHealth = 0; // int32
 		ptrdiff_t m_iTeamNum = 0; // uint8
 		ptrdiff_t m_hOwnerEntity = 0; // CHandle<C_BaseEntity>
 	} C_BaseEntity;
+
+	struct CBodyComponentSkeletonInstance {
+		ptrdiff_t m_skeletonInstance = 0; // CSkeletonInstance
+	} CBodyComponentSkeletonInstance;
+
+	struct CSkeletonInstance {
+		ptrdiff_t m_modelState = 0; // CModelState
+	} CSkeletonInstance;
+
+	struct CModelState {
+		ptrdiff_t m_hModel = 0; // CStrongHandle<InfoForResourceTypeCModel>
+		ptrdiff_t m_ModelName = 0; // CUtlSymbolLarge
+	} CModelState;
 
 	struct C_BaseModelEntity {
 		ptrdiff_t m_Glow = 0; // CGlowProperty

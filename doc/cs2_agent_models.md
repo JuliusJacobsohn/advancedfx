@@ -1,0 +1,154 @@
+# CS2 Agent Model Reference
+
+Generated from `research/cs2-items-vrf/scripts/items/items_game.txt`. Use the `Internal name` value directly with `mirv_demo_agent xuid <steamid64> set <name>` or `mirv_demo_agent slot <1-10> set <name>`. Direct `agents/models/...vmdl` paths still work. Numeric item definition IDs are also accepted by `mirv_demo_agent` when they match this table.
+
+To update this list after CS2 adds agents:
+
+1. Refresh / re-extract `items_game.txt` into `research/cs2-items-vrf/scripts/items/items_game.txt`.
+2. Re-run the parser used for this file: scan item blocks whose `name` starts with `customplayer_` and whose `model_player` starts with `agents/models/`.
+3. Update this document and the static generated include `AfxHookSource2/DemoAgentModels.inc`.
+4. Build `AfxHookSource2` and verify `mirv_demo_agent slot 1 set <new internal name>` resolves to the expected model.
+
+| Item def | Team | Rarity | Legacy | Internal name | Item name token | Model path |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4613 | T | legendary | 0 | `customplayer_tm_professional_varf5` | `#CSGO_CustomPlayer_tm_professional_varf5` | `agents/models/tm_professional/tm_professional_varf5.vmdl` |
+| 4619 | CT | mythical | 0 | `customplayer_ctm_st6_variantj` | `#CSGO_CustomPlayer_ctm_st6_variantj` | `agents/models/ctm_st6/ctm_st6_variantj.vmdl` |
+| 4680 | CT | legendary | 0 | `customplayer_ctm_st6_variantl` | `#CSGO_CustomPlayer_ctm_st6_variantl` | `agents/models/ctm_st6/ctm_st6_variantl.vmdl` |
+| 4711 | CT | ancient | 0 | `customplayer_ctm_swat_variante` | `#CSGO_CustomPlayer_ctm_swat_variante` | `agents/models/ctm_swat/ctm_swat_variante.vmdl` |
+| 4712 | CT | legendary | 0 | `customplayer_ctm_swat_variantf` | `#CSGO_CustomPlayer_ctm_swat_variantf` | `agents/models/ctm_swat/ctm_swat_variantf.vmdl` |
+| 4713 | CT | mythical | 0 | `customplayer_ctm_swat_variantg` | `#CSGO_CustomPlayer_ctm_swat_variantg` | `agents/models/ctm_swat/ctm_swat_variantg.vmdl` |
+| 4714 | CT | rare | 0 | `customplayer_ctm_swat_varianth` | `#CSGO_CustomPlayer_ctm_swat_varianth` | `agents/models/ctm_swat/ctm_swat_varianth.vmdl` |
+| 4715 | CT | mythical | 0 | `customplayer_ctm_swat_varianti` | `#CSGO_CustomPlayer_ctm_swat_varianti` | `agents/models/ctm_swat/ctm_swat_varianti.vmdl` |
+| 4716 | CT | rare | 0 | `customplayer_ctm_swat_variantj` | `#CSGO_CustomPlayer_ctm_swat_variantj` | `agents/models/ctm_swat/ctm_swat_variantj.vmdl` |
+| 4718 | T | legendary | 0 | `customplayer_tm_balkan_variantk` | `#CSGO_CustomPlayer_tm_balkan_variantk` | `agents/models/tm_balkan/tm_balkan_variantk.vmdl` |
+| 4726 | T | ancient | 0 | `customplayer_tm_professional_varf` | `#CSGO_CustomPlayer_tm_professional_varf` | `agents/models/tm_professional/tm_professional_varf.vmdl` |
+| 4727 | T | legendary | 0 | `customplayer_tm_professional_varg` | `#CSGO_CustomPlayer_tm_professional_varg` | `agents/models/tm_professional/tm_professional_varg.vmdl` |
+| 4728 | T | mythical | 0 | `customplayer_tm_professional_varh` | `#CSGO_CustomPlayer_tm_professional_varh` | `agents/models/tm_professional/tm_professional_varh.vmdl` |
+| 4730 | T | mythical | 0 | `customplayer_tm_professional_varj` | `#CSGO_CustomPlayer_tm_professional_varj` | `agents/models/tm_professional/tm_professional_varj.vmdl` |
+| 4732 | T | legendary | 0 | `customplayer_tm_professional_vari` | `#CSGO_CustomPlayer_tm_professional_vari` | `agents/models/tm_professional/tm_professional_vari.vmdl` |
+| 4733 | T | ancient | 0 | `customplayer_tm_professional_varf1` | `#CSGO_CustomPlayer_tm_professional_varf1` | `agents/models/tm_professional/tm_professional_varf1.vmdl` |
+| 4734 | T | ancient | 0 | `customplayer_tm_professional_varf2` | `#CSGO_CustomPlayer_tm_professional_varf2` | `agents/models/tm_professional/tm_professional_varf2.vmdl` |
+| 4735 | T | ancient | 0 | `customplayer_tm_professional_varf3` | `#CSGO_CustomPlayer_tm_professional_varf3` | `agents/models/tm_professional/tm_professional_varf3.vmdl` |
+| 4736 | T | ancient | 0 | `customplayer_tm_professional_varf4` | `#CSGO_CustomPlayer_tm_professional_varf4` | `agents/models/tm_professional/tm_professional_varf4.vmdl` |
+| 4749 | CT | mythical | 0 | `customplayer_ctm_gendarmerie_varianta` | `#CSGO_CustomPlayer_ctm_gendarmerie_varianta` | `agents/models/ctm_gendarmerie/ctm_gendarmerie_varianta.vmdl` |
+| 4750 | CT | legendary | 0 | `customplayer_ctm_gendarmerie_variantb` | `#CSGO_CustomPlayer_ctm_gendarmerie_variantb` | `agents/models/ctm_gendarmerie/ctm_gendarmerie_variantb.vmdl` |
+| 4751 | CT | ancient | 0 | `customplayer_ctm_gendarmerie_variantc` | `#CSGO_CustomPlayer_ctm_gendarmerie_variantc` | `agents/models/ctm_gendarmerie/ctm_gendarmerie_variantc.vmdl` |
+| 4752 | CT | rare | 0 | `customplayer_ctm_gendarmerie_variantd` | `#CSGO_CustomPlayer_ctm_gendarmerie_variantd` | `agents/models/ctm_gendarmerie/ctm_gendarmerie_variantd.vmdl` |
+| 4753 | CT | mythical | 0 | `customplayer_ctm_gendarmerie_variante` | `#CSGO_CustomPlayer_ctm_gendarmerie_variante` | `agents/models/ctm_gendarmerie/ctm_gendarmerie_variante.vmdl` |
+| 4756 | CT | mythical | 0 | `customplayer_ctm_swat_variantk` | `#CSGO_CustomPlayer_ctm_swat_variantk` | `agents/models/ctm_swat/ctm_swat_variantk.vmdl` |
+| 4757 | CT | ancient | 0 | `customplayer_ctm_diver_varianta` | `#CSGO_CustomPlayer_ctm_diver_varianta` | `agents/models/ctm_diver/ctm_diver_varianta.vmdl` |
+| 4771 | CT | ancient | 0 | `customplayer_ctm_diver_variantb` | `#CSGO_CustomPlayer_ctm_diver_variantb` | `agents/models/ctm_diver/ctm_diver_variantb.vmdl` |
+| 4772 | CT | legendary | 0 | `customplayer_ctm_diver_variantc` | `#CSGO_CustomPlayer_ctm_diver_variantc` | `agents/models/ctm_diver/ctm_diver_variantc.vmdl` |
+| 4773 | T | legendary | 0 | `customplayer_tm_jungle_raider_varianta` | `#CSGO_CustomPlayer_tm_jungle_raider_varianta` | `agents/models/tm_jungle_raider/tm_jungle_raider_varianta.vmdl` |
+| 4774 | T | ancient | 0 | `customplayer_tm_jungle_raider_variantb` | `#CSGO_CustomPlayer_tm_jungle_raider_variantb` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantb.vmdl` |
+| 4775 | T | legendary | 0 | `customplayer_tm_jungle_raider_variantc` | `#CSGO_CustomPlayer_tm_jungle_raider_variantc` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantc.vmdl` |
+| 4776 | T | mythical | 0 | `customplayer_tm_jungle_raider_variantd` | `#CSGO_CustomPlayer_tm_jungle_raider_variantd` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantd.vmdl` |
+| 4777 | T | ancient | 0 | `customplayer_tm_jungle_raider_variante` | `#CSGO_CustomPlayer_tm_jungle_raider_variante` | `agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl` |
+| 4778 | T | rare | 0 | `customplayer_tm_jungle_raider_variantf` | `#CSGO_CustomPlayer_tm_jungle_raider_variantf` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantf.vmdl` |
+| 4780 | T | ancient | 0 | `customplayer_tm_jungle_raider_variantb2` | `#CSGO_CustomPlayer_tm_jungle_raider_variantb2` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantb2.vmdl` |
+| 4781 | T | mythical | 0 | `customplayer_tm_jungle_raider_variantf2` | `#CSGO_CustomPlayer_tm_jungle_raider_variantf2` | `agents/models/tm_jungle_raider/tm_jungle_raider_variantf2.vmdl` |
+| 5036 | T |  | 1 | `customplayer_t_map_based` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5037 | CT |  | 1 | `customplayer_ct_map_based` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5038 | T | common | 1 | `customplayer_tm_anarchist` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5039 | T | common | 1 | `customplayer_tm_anarchist_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5040 | T | common | 1 | `customplayer_tm_anarchist_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5041 | T | common | 1 | `customplayer_tm_anarchist_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5042 | T | common | 1 | `customplayer_tm_anarchist_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5043 | T | common | 1 | `customplayer_tm_pirate` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5044 | T | common | 1 | `customplayer_tm_pirate_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5045 | T | common | 1 | `customplayer_tm_pirate_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5046 | T | common | 1 | `customplayer_tm_pirate_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5047 | T | common | 1 | `customplayer_tm_pirate_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5048 | T | common | 1 | `customplayer_tm_professional` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5049 | T | common | 1 | `customplayer_tm_professional_var1` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5050 | T | common | 1 | `customplayer_tm_professional_var2` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5051 | T | common | 1 | `customplayer_tm_professional_var3` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5052 | T | common | 1 | `customplayer_tm_professional_var4` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5053 | T | common | 1 | `customplayer_tm_separatist` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5054 | T | common | 1 | `customplayer_tm_separatist_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5055 | T | common | 1 | `customplayer_tm_separatist_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5056 | T | common | 1 | `customplayer_tm_separatist_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5057 | T | common | 1 | `customplayer_tm_separatist_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5058 | CT | common | 1 | `customplayer_ctm_gign` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5059 | CT | common | 1 | `customplayer_ctm_gign_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5060 | CT | common | 1 | `customplayer_ctm_gign_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5061 | CT | common | 1 | `customplayer_ctm_gign_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5062 | CT | common | 1 | `customplayer_ctm_gign_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5063 | CT | common | 1 | `customplayer_ctm_gsg9` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5064 | CT | common | 1 | `customplayer_ctm_gsg9_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5065 | CT | common | 1 | `customplayer_ctm_gsg9_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5066 | CT | common | 1 | `customplayer_ctm_gsg9_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5067 | CT | common | 1 | `customplayer_ctm_gsg9_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5068 | CT | common | 1 | `customplayer_ctm_idf` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5069 | CT | common | 1 | `customplayer_ctm_idf_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5070 | CT | common | 1 | `customplayer_ctm_idf_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5071 | CT | common | 1 | `customplayer_ctm_idf_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5072 | CT | common | 1 | `customplayer_ctm_idf_variante` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5073 | CT | common | 1 | `customplayer_ctm_idf_variantf` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5074 | CT | common | 1 | `customplayer_ctm_swat` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5075 | CT | common | 1 | `customplayer_ctm_swat_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5076 | CT | common | 1 | `customplayer_ctm_swat_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5077 | CT | common | 1 | `customplayer_ctm_swat_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5078 | CT | common | 1 | `customplayer_ctm_swat_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5079 | CT | common | 1 | `customplayer_ctm_sas_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5080 | CT | common | 1 | `customplayer_ctm_sas_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5081 | CT | common | 1 | `customplayer_ctm_sas_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5082 | CT | common | 1 | `customplayer_ctm_sas_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5083 | CT | common | 1 | `customplayer_ctm_st6` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5084 | CT | common | 1 | `customplayer_ctm_st6_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5085 | CT | common | 1 | `customplayer_ctm_st6_variantb` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5086 | CT | common | 1 | `customplayer_ctm_st6_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5087 | CT | common | 1 | `customplayer_ctm_st6_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5088 | T | common | 1 | `customplayer_tm_balkan_variante` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5089 | T | common | 1 | `customplayer_tm_balkan_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5090 | T | common | 1 | `customplayer_tm_balkan_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5091 | T | common | 1 | `customplayer_tm_balkan_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5092 | T | common | 1 | `customplayer_tm_balkan_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5093 | T | common | 1 | `customplayer_tm_jumpsuit_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5094 | T | common | 1 | `customplayer_tm_jumpsuit_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5095 | T | common | 1 | `customplayer_tm_jumpsuit_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5096 | T | common | 1 | `customplayer_tm_phoenix_heavy` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5097 | CT | common | 1 | `customplayer_ctm_heavy` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5100 | T | common | 1 | `customplayer_tm_leet_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_leet/tm_leet_varianta.vmdl` |
+| 5101 | T | common | 1 | `customplayer_tm_leet_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_leet/tm_leet_variantb.vmdl` |
+| 5102 | T | common | 1 | `customplayer_tm_leet_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_leet/tm_leet_variantc.vmdl` |
+| 5103 | T | common | 1 | `customplayer_tm_leet_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_leet/tm_leet_variantd.vmdl` |
+| 5104 | T | common | 1 | `customplayer_tm_leet_variante` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_leet/tm_leet_variante.vmdl` |
+| 5105 | T | rare | 0 | `customplayer_tm_leet_variantg` | `#CSGO_CustomPlayer_tm_leet_variantg` | `agents/models/tm_leet/tm_leet_variantg.vmdl` |
+| 5106 | T | mythical | 0 | `customplayer_tm_leet_varianth` | `#CSGO_CustomPlayer_tm_leet_varianth` | `agents/models/tm_leet/tm_leet_varianth.vmdl` |
+| 5107 | T | legendary | 0 | `customplayer_tm_leet_varianti` | `#CSGO_CustomPlayer_tm_leet_varianti` | `agents/models/tm_leet/tm_leet_varianti.vmdl` |
+| 5108 | T | ancient | 0 | `customplayer_tm_leet_variantf` | `#CSGO_CustomPlayer_tm_leet_variantf` | `agents/models/tm_leet/tm_leet_variantf.vmdl` |
+| 5109 | T | rare | 0 | `customplayer_tm_leet_variantj` | `#CSGO_CustomPlayer_tm_leet_variantj` | `agents/models/tm_leet/tm_leet_variantj.vmdl` |
+| 5200 | T | common | 1 | `customplayer_tm_phoenix` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix.vmdl` |
+| 5201 | T | common | 1 | `customplayer_tm_phoenix_varianta` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix_varianta.vmdl` |
+| 5202 | T | common | 1 | `customplayer_tm_phoenix_variantb` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix_variantb.vmdl` |
+| 5203 | T | common | 1 | `customplayer_tm_phoenix_variantc` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix_variantc.vmdl` |
+| 5204 | T | common | 1 | `customplayer_tm_phoenix_variantd` | `#CSGO_CustomPlayer_t_map_based` | `agents/models/tm_phoenix/tm_phoenix_variantd.vmdl` |
+| 5205 | T | rare | 0 | `customplayer_tm_phoenix_varianth` | `#CSGO_CustomPlayer_tm_phoenix_varianth` | `agents/models/tm_phoenix/tm_phoenix_varianth.vmdl` |
+| 5206 | T | rare | 0 | `customplayer_tm_phoenix_variantf` | `#CSGO_CustomPlayer_tm_phoenix_variantf` | `agents/models/tm_phoenix/tm_phoenix_variantf.vmdl` |
+| 5207 | T | mythical | 0 | `customplayer_tm_phoenix_variantg` | `#CSGO_CustomPlayer_tm_phoenix_variantg` | `agents/models/tm_phoenix/tm_phoenix_variantg.vmdl` |
+| 5208 | T | rare | 0 | `customplayer_tm_phoenix_varianti` | `#CSGO_CustomPlayer_tm_phoenix_varianti` | `agents/models/tm_phoenix/tm_phoenix_varianti.vmdl` |
+| 5300 | CT | common | 1 | `customplayer_ctm_fbi` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_fbi/ctm_fbi.vmdl` |
+| 5301 | CT | common | 1 | `customplayer_ctm_fbi_varianta` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_fbi/ctm_fbi_varianta.vmdl` |
+| 5302 | CT | common | 1 | `customplayer_ctm_fbi_variantc` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_fbi/ctm_fbi_variantc.vmdl` |
+| 5303 | CT | common | 1 | `customplayer_ctm_fbi_variantd` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_fbi/ctm_fbi_variantd.vmdl` |
+| 5304 | CT | common | 1 | `customplayer_ctm_fbi_variante` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_fbi/ctm_fbi_variante.vmdl` |
+| 5305 | CT | rare | 0 | `customplayer_ctm_fbi_variantf` | `#CSGO_CustomPlayer_ctm_fbi_variantf` | `agents/models/ctm_fbi/ctm_fbi_variantf.vmdl` |
+| 5306 | CT | mythical | 0 | `customplayer_ctm_fbi_variantg` | `#CSGO_CustomPlayer_ctm_fbi_variantg` | `agents/models/ctm_fbi/ctm_fbi_variantg.vmdl` |
+| 5307 | CT | legendary | 0 | `customplayer_ctm_fbi_varianth` | `#CSGO_CustomPlayer_ctm_fbi_varianth` | `agents/models/ctm_fbi/ctm_fbi_varianth.vmdl` |
+| 5308 | CT | ancient | 0 | `customplayer_ctm_fbi_variantb` | `#CSGO_CustomPlayer_ctm_fbi_variantb` | `agents/models/ctm_fbi/ctm_fbi_variantb.vmdl` |
+| 5400 | CT | rare | 0 | `customplayer_ctm_st6_variantk` | `#CSGO_CustomPlayer_ctm_st6_variantk` | `agents/models/ctm_st6/ctm_st6_variantk.vmdl` |
+| 5401 | CT | rare | 0 | `customplayer_ctm_st6_variante` | `#CSGO_CustomPlayer_ctm_st6_variante` | `agents/models/ctm_st6/ctm_st6_variante.vmdl` |
+| 5402 | CT | mythical | 0 | `customplayer_ctm_st6_variantg` | `#CSGO_CustomPlayer_ctm_st6_variantg` | `agents/models/ctm_st6/ctm_st6_variantg.vmdl` |
+| 5403 | CT | legendary | 0 | `customplayer_ctm_st6_variantm` | `#CSGO_CustomPlayer_ctm_st6_variantm` | `agents/models/ctm_st6/ctm_st6_variantm.vmdl` |
+| 5404 | CT | ancient | 0 | `customplayer_ctm_st6_varianti` | `#CSGO_CustomPlayer_ctm_st6_varianti` | `agents/models/ctm_st6/ctm_st6_varianti.vmdl` |
+| 5405 | CT | rare | 0 | `customplayer_ctm_st6_variantn` | `#CSGO_CustomPlayer_ctm_st6_variantn` | `agents/models/ctm_st6/ctm_st6_variantn.vmdl` |
+| 5500 | T | mythical | 0 | `customplayer_tm_balkan_variantf` | `#CSGO_CustomPlayer_tm_balkan_variantf` | `agents/models/tm_balkan/tm_balkan_variantf.vmdl` |
+| 5501 | T | mythical | 0 | `customplayer_tm_balkan_varianti` | `#CSGO_CustomPlayer_tm_balkan_varianti` | `agents/models/tm_balkan/tm_balkan_varianti.vmdl` |
+| 5502 | T | legendary | 0 | `customplayer_tm_balkan_variantg` | `#CSGO_CustomPlayer_tm_balkan_variantg` | `agents/models/tm_balkan/tm_balkan_variantg.vmdl` |
+| 5503 | T | legendary | 0 | `customplayer_tm_balkan_variantj` | `#CSGO_CustomPlayer_tm_balkan_variantj` | `agents/models/tm_balkan/tm_balkan_variantj.vmdl` |
+| 5504 | T | ancient | 0 | `customplayer_tm_balkan_varianth` | `#CSGO_CustomPlayer_tm_balkan_varianth` | `agents/models/tm_balkan/tm_balkan_varianth.vmdl` |
+| 5505 | T | rare | 0 | `customplayer_tm_balkan_variantl` | `#CSGO_CustomPlayer_tm_balkan_variantl` | `agents/models/tm_balkan/tm_balkan_variantl.vmdl` |
+| 5600 | CT | common | 1 | `customplayer_ctm_sas` | `#CSGO_CustomPlayer_ct_map_based` | `agents/models/ctm_sas/ctm_sas.vmdl` |
+| 5601 | CT | rare | 0 | `customplayer_ctm_sas_variantf` | `#CSGO_CustomPlayer_ctm_sas_variantf` | `agents/models/ctm_sas/ctm_sas_variantf.vmdl` |
+| 5602 | CT | rare | 0 | `customplayer_ctm_sas_variantg` | `#CSGO_CustomPlayer_ctm_sas_variantg` | `agents/models/ctm_sas/ctm_sas_variantg.vmdl` |
