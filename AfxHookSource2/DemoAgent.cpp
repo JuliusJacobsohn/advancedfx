@@ -21,12 +21,26 @@ extern SOURCESDK::CS2::ISource2EngineToClient* g_pEngineToClient;
 namespace {
 
 constexpr const char* kVypaModel = "agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl";
+constexpr uint32_t kEntityFlagSpawnInProgress = 0x2;
+constexpr uint32_t kEntityFlagInStagingList = 0x4;
+constexpr uint32_t kEntityFlagDeleteInProgress = 0x10;
+constexpr uint32_t kEntityFlagMarkedForDelete = 0x200;
+constexpr uint32_t kEntityFlagConstructionInProgress = 0x400;
 
 using CBaseModelEntity_SetModel_t = bool(__fastcall*)(void* entity, const char* modelName);
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
 std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
 bool g_SetModelDetoured = false;
+
+struct AppliedModelState {
+	std::string modelName;
+	uintptr_t modelHandle = 0;
+	uint32_t modelNameSymbol = 0;
+};
+
+std::unordered_map<uint64_t, AppliedModelState> g_AppliedModelStates;
+bool g_InAutoRepair = false;
 
 struct PlayerPawnInfo {
 	int entry = 0;
@@ -141,6 +155,29 @@ uint32_t getModelNameSymbol(CEntityInstance* entity)
 	auto modelState = getModelState(entity);
 	if (!modelState) return 0;
 	return *(uint32_t*)(modelState + g_clientDllOffsets.CModelState.m_ModelName);
+}
+
+uint32_t getEntityIdentityFlags(CEntityInstance* entity)
+{
+	if (!entity) return 0;
+
+	auto entityIdentity = *(unsigned char**)((unsigned char*)entity + g_clientDllOffsets.CEntityInstance.m_pEntity);
+	if (!entityIdentity) return 0;
+
+	return *(uint32_t*)(entityIdentity + g_clientDllOffsets.CEntityIdentity.m_flags);
+}
+
+bool canSafelyAutoRepair(CEntityInstance* entity)
+{
+	const uint32_t flags = getEntityIdentityFlags(entity);
+	constexpr uint32_t unsafeFlags =
+		kEntityFlagSpawnInProgress |
+		kEntityFlagInStagingList |
+		kEntityFlagDeleteInProgress |
+		kEntityFlagMarkedForDelete |
+		kEntityFlagConstructionInProgress;
+
+	return 0 == (flags & unsafeFlags);
 }
 
 const char* getConfiguredModelForEntity(void* entity)
@@ -275,18 +312,63 @@ bool applyPlayerModel(const PlayerPawnInfo& info, const char* modelName, bool pr
 
 	g_SetModel(info.pawn, modelName);
 
+	auto& state = g_AppliedModelStates[info.xuid];
+	state.modelName = modelName;
+	state.modelHandle = getModelHandle(info.pawn);
+	state.modelNameSymbol = getModelNameSymbol(info.pawn);
+
 	if (print) {
 		advancedfx::Message(
-			"mirv_demo_agent: applied slotEntry=%i xuid=%s%llu name=%s model=%s\n",
+			"mirv_demo_agent: applied slotEntry=%i xuid=%s%llu name=%s model=%s modelHandle=0x%p modelNameSymbol=0x%08x\n",
 			info.entry,
 			looksLikeSteamId(info.xuid) ? "x" : "",
 			(unsigned long long)info.xuid,
 			getControllerName(info.controller),
-			modelName
+			modelName,
+			(void*)state.modelHandle,
+			state.modelNameSymbol
 		);
 	}
 
 	return true;
+}
+
+bool shouldRepairPlayerModel(const PlayerPawnInfo& info, const std::string& modelName)
+{
+	auto stateIt = g_AppliedModelStates.find(info.xuid);
+	if (g_AppliedModelStates.end() == stateIt) return true;
+
+	const auto& state = stateIt->second;
+	if (state.modelName != modelName) return true;
+	if (!state.modelHandle && !state.modelNameSymbol) return true;
+
+	const uintptr_t currentHandle = getModelHandle(info.pawn);
+	const uint32_t currentNameSymbol = getModelNameSymbol(info.pawn);
+	return currentHandle != state.modelHandle || currentNameSymbol != state.modelNameSymbol;
+}
+
+int repairConfiguredOverrides()
+{
+	if (g_InAutoRepair || g_PlayerModelOverrides.empty()) return 0;
+	if (!ensureCanApply(false)) return 0;
+
+	g_InAutoRepair = true;
+
+	int repaired = 0;
+	const auto players = collectPlayerPawns();
+	for (const auto& player : players) {
+		auto it = g_PlayerModelOverrides.find(player.xuid);
+		if (g_PlayerModelOverrides.end() == it) continue;
+
+		if (!canSafelyAutoRepair(player.pawn)) continue;
+		if (!shouldRepairPlayerModel(player, it->second)) continue;
+		if (applyPlayerModel(player, it->second.c_str(), false)) {
+			++repaired;
+		}
+	}
+
+	g_InAutoRepair = false;
+	return repaired;
 }
 
 int applyConfiguredOverrides(bool print)
@@ -335,6 +417,7 @@ bool setXuidOverride(uint64_t xuid, const char* modelName, bool applyNow)
 	}
 
 	g_PlayerModelOverrides[xuid] = modelName;
+	g_AppliedModelStates.erase(xuid);
 	advancedfx::Message(
 		"mirv_demo_agent: configured xuid=%s%llu model=%s\n",
 		looksLikeSteamId(xuid) ? "x" : "",
@@ -383,15 +466,16 @@ void inspectPlayers()
 	}
 
 	const auto players = collectPlayerPawns();
-	advancedfx::Message("slot / entry / class / modelHandle / modelNameSymbol / xuid / name / configuredModel\n");
+	advancedfx::Message("slot / entry / class / identityFlags / modelHandle / modelNameSymbol / xuid / name / configuredModel\n");
 	for (size_t i = 0; i < players.size(); ++i) {
 		const auto& player = players[i];
 		const auto modelIt = g_PlayerModelOverrides.find(player.xuid);
 		advancedfx::Message(
-			"%llu / %i / %s / 0x%p / 0x%08x / %s%llu / %s / %s\n",
+			"%llu / %i / %s / 0x%08x / 0x%p / 0x%08x / %s%llu / %s / %s\n",
 			(unsigned long long)(i + 1),
 			player.entry,
 			player.pawn->GetClientClassName() ? player.pawn->GetClientClassName() : "",
+			getEntityIdentityFlags(player.pawn),
 			(void*)getModelHandle(player.pawn),
 			getModelNameSymbol(player.pawn),
 			looksLikeSteamId(player.xuid) ? "x" : "",
@@ -433,6 +517,20 @@ void HookDemoAgent(HMODULE clientDll)
 	resolveSetModel(clientDll, true);
 }
 
+void DemoAgent_OnClientFrameStageNotify(int curStage, bool isAfter)
+{
+	if (!isAfter) return;
+
+	const int repaired = repairConfiguredOverrides();
+	if (0 < repaired) {
+		advancedfx::Message(
+			"mirv_demo_agent: repaired %i configured model override(s) after frame stage %i.\n",
+			repaired,
+			curStage
+		);
+	}
+}
+
 CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent overrides.")
 {
 	const char* arg0 = args->ArgV(0);
@@ -454,6 +552,7 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 		if (0 == _stricmp("clear", arg1)) {
 			g_PlayerModelOverrides.clear();
+			g_AppliedModelStates.clear();
 			advancedfx::Message("mirv_demo_agent: cleared all configured model overrides.\n");
 			return;
 		}
@@ -478,6 +577,7 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 			if (0 == _stricmp("clear", args->ArgV(3))) {
 				const auto erased = g_PlayerModelOverrides.erase(xuid);
+				g_AppliedModelStates.erase(xuid);
 				advancedfx::Message(
 					"mirv_demo_agent: %s override for xuid=%s%llu.\n",
 					erased ? "cleared" : "had no",

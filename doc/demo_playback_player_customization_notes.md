@@ -21,7 +21,7 @@ Current implementation status:
 | Player color | Done | `mirv_player_color` writes `CCSPlayerController::m_iCompTeammateColor`; verified for HUD/chat color in the Inferno test demo and good enough for local fragmovie/demo-render use. |
 | Avatars | Done | `mirv_avatar` replaces demo player avatars with avatars resolved from another SteamID64; verified for top bar, scoreboard, and bottom spectator bar without overlay panels. |
 | Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
-| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply model overrides by SteamID64/XUID. Repeat-per-frame application is disabled after crash reports. |
+| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply model overrides by SteamID64/XUID. It hooks normal model assignment and also repairs configured pawns after client frame-stage updates if demo skip/rewind restores original model state. |
 
 Agent model prototype notes:
 
@@ -30,8 +30,12 @@ Agent model prototype notes:
 - Manual test helper: `mirv_demo_agent slot <1-10> set vypa`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
 - Use `mirv_demo_agent apply` to re-apply all currently configured XUID overrides once.
 - Configured XUID overrides are applied through a detour on the client `CBaseModelEntity_SetModel` candidate. When CS2 assigns a model to a `C_CSPlayerPawn`, the hook resolves pawn -> controller -> XUID and substitutes the configured model before the original assignment runs. `mirv_demo_agent apply` remains only as an immediate helper for already-spawned pawns.
+- 2026-06-07 skip/rewind finding: demo seeking can restore player model state without hitting the current `SetModel` detour. The prototype now records the target `CModelState` handle/name symbol after applying an override and checks configured player pawns after client frame-stage notifications. If a configured pawn no longer matches its remembered target model state, the override is applied again.
+- This is a repair at the client frame-stage boundary, not yet the ideal low-level packet/entity-field replacement. It should survive skip/rewind better than the pure `SetModel` detour, and it avoids unconditional per-frame `SetModel` spam by only reapplying on detected mismatch.
+- Seek safety detail: an early repair immediately after demo skip produced `CModelState::SetupModel` assertions while the pawn identity still had `EF_IN_STAGING_LIST`. The repair path now reads `CEntityIdentity::m_flags` and skips automatic repair while spawn/staging/delete/construction bits are present. `mirv_demo_agent inspect` prints identity flags for this reason.
 - 2026-06-07 verification on `replays/match730_003816038387630997543_1135542072_274.dem`: inspect listed 10 `C_CSPlayerPawn` entries; single apply changed all 10 to one shared model handle/name symbol and exited cleanly through scheduled `quit`.
-- Avoid applying to `C_CSObserverPawn` entries and avoid automatic frame-by-frame `SetModel` calls while this remains experimental.
+- 2026-06-07 seek verification on the same demo: ten different configured agent models survived multiple skips. Console showed repairs after forward seeks to demo ticks `9807` and `14903`, and after a backward seek to demo tick `29`. After adding the entity staging guard, the previous `CModelState::SetupModel` assertion did not reappear in the filtered log.
+- Avoid applying to `C_CSObserverPawn` entries. Automatic repair is currently limited to configured `C_CSPlayerPawn` entries during active demo playback.
 - Current limitation: overrides are stored in process memory only; they are not saved to disk or embedded into demo files.
 
 Lower-level agent replacement research:
@@ -39,7 +43,7 @@ Lower-level agent replacement research:
 - CS2 demos replay normal network data. Relevant protobuf messages include `CSVCMsg_CreateStringTable`, `CSVCMsg_UpdateStringTable`, and `CSVCMsg_PacketEntities`; model names / indices are expected to enter the client through network string tables plus packet-entity state rather than through a bespoke demo-only agent format.
 - A resource-load hook alone is probably too late and too broad. It can redirect a requested `.vmdl`, but it does not naturally know which player XUID caused the request.
 - Better low-level targets are either the decoded model string/index before it is assigned to the player pawn, or the client model-assignment path (`CBaseModelEntity_SetModel` / model-state update) with current entity context available.
-- Current agent path intercepts model assignment for `C_CSPlayerPawn`, maps pawn -> controller -> XUID, and substitutes the configured model before the original assignment finishes. This is preferred over frame repair because every normal model assignment naturally passes through the replacement policy.
+- Current agent path intercepts model assignment for `C_CSPlayerPawn`, maps pawn -> controller -> XUID, and substitutes the configured model before the original assignment finishes. Demo seeking appears to have a model-state restore path that can bypass this function, so a frame-stage mismatch repair currently backs it up.
 - For weapon skins, the equivalent target is lower than agent model assignment: packet-entity/econ fields for weapon entities, keyed by owner XUID plus weapon identity. That requires mapping weapon entity -> owner pawn/controller -> XUID and replacing paint/econ fields when weapon state is decoded or applied.
 
 Shared implementation constraints:

@@ -1512,6 +1512,7 @@ void  new_CS2_Client_FrameStageNotify(void* This, SOURCESDK::CS2::ClientFrameSta
 	old_CS2_Client_FrameStageNotify(This, curStage);
 
 	AfxHookSource2Rs_Engine_OnClientFrameStageNotify(curStage, false);
+	DemoAgent_OnClientFrameStageNotify((int)curStage, true);
 
 	AfxHookSource2Rs_Engine_RunJobQueue();
 }

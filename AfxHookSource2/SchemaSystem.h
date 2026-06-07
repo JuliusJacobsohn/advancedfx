@@ -22,6 +22,10 @@ struct ClientDllOffsets_t {
 		ptrdiff_t m_pEntity = 0; // CEntityIdentity*
 	} CEntityInstance;
 
+	struct CEntityIdentity {
+		ptrdiff_t m_flags = 0; // uint32
+	} CEntityIdentity;
+
 	struct C_BaseEntity {
 		ptrdiff_t m_CBodyComponent = 0; // CBodyComponent*
 		ptrdiff_t m_pGameSceneNode = 0; // CGameSceneNode*
