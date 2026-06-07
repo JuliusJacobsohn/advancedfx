@@ -29,10 +29,18 @@ Agent model prototype notes:
 - Stable command sequence for a specific player: `mirv_demo_agent inspect`, `mirv_demo_agent xuid <steamid64> set vypa`, `mirv_demo_agent inspect`.
 - Manual test helper: `mirv_demo_agent slot <1-10> set vypa`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
 - Use `mirv_demo_agent apply` to re-apply all currently configured XUID overrides once.
-- Persistence is enabled by default. `mirv_demo_agent persist 0|1` toggles automatic re-apply for configured XUID overrides when matching pawns reappear or their model state resets after seeking/rewinding.
+- Configured XUID overrides are automatically re-applied when matching pawns reappear or their model state resets after seeking/rewinding.
 - 2026-06-07 verification on `replays/match730_003816038387630997543_1135542072_274.dem`: inspect listed 10 `C_CSPlayerPawn` entries; single apply changed all 10 to one shared model handle/name symbol and exited cleanly through scheduled `quit`.
 - Avoid applying to `C_CSObserverPawn` entries and avoid automatic frame-by-frame `SetModel` calls while this remains experimental.
 - Current limitation: overrides are stored in process memory only; they are not saved to disk or embedded into demo files.
+
+Lower-level agent replacement research:
+
+- CS2 demos replay normal network data. Relevant protobuf messages include `CSVCMsg_CreateStringTable`, `CSVCMsg_UpdateStringTable`, and `CSVCMsg_PacketEntities`; model names / indices are expected to enter the client through network string tables plus packet-entity state rather than through a bespoke demo-only agent format.
+- A resource-load hook alone is probably too late and too broad. It can redirect a requested `.vmdl`, but it does not naturally know which player XUID caused the request.
+- Better low-level targets are either the decoded model string/index before it is assigned to the player pawn, or the client model-assignment path (`CBaseModelEntity_SetModel` / model-state update) with current entity context available.
+- For agents, the preferred next step is to intercept model assignment for `C_CSPlayerPawn`, map pawn -> controller -> XUID, and substitute the configured model before the original assignment finishes. That should avoid seek/rewind artifacts because every model assignment naturally passes through the replacement policy.
+- For weapon skins, the equivalent target is lower than agent model assignment: packet-entity/econ fields for weapon entities, keyed by owner XUID plus weapon identity. That requires mapping weapon entity -> owner pawn/controller -> XUID and replacing paint/econ fields when weapon state is decoded or applied.
 
 Shared implementation constraints:
 

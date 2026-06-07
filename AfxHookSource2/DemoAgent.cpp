@@ -25,7 +25,6 @@ using CBaseModelEntity_SetModel_t = bool(__fastcall*)(void* entity, const char* 
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
 std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
-bool g_PersistenceEnabled = true;
 
 struct PlayerPawnInfo {
 	int entry = 0;
@@ -353,11 +352,10 @@ bool setSlotOverride(int slot, const char* modelName)
 void inspectPlayers()
 {
 	advancedfx::Message(
-		"mirv_demo_agent inspect: playingDemo=%i setModel=%p configured=%llu persist=%i\n",
+		"mirv_demo_agent inspect: playingDemo=%i setModel=%p configured=%llu\n",
 		isPlayingDemo() ? 1 : 0,
 		(void*)g_SetModel,
-		(unsigned long long)g_PlayerModelOverrides.size(),
-		g_PersistenceEnabled ? 1 : 0
+		(unsigned long long)g_PlayerModelOverrides.size()
 	);
 
 	if (!g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
@@ -394,13 +392,11 @@ void printHelp(const char* arg0)
 		"%s slot <1-10> set vypa|<modelPath> - Configure and apply the current slot's model by resolved XUID.\n"
 		"%s apply - Apply all configured XUID model overrides once during demo playback.\n"
 		"%s clear - Clear all configured model overrides.\n"
-		"%s persist 0|1 - Disable or enable automatic re-apply for configured XUID overrides.\n"
 		"Built-in aliases:\n"
 		"\tvypa -> %s\n"
 		"Notes:\n"
 		"\tPrototype for local demo playback / recording only. Requires -insecure and active demo playback.\n"
 		"\tSlot numbers are temporary helpers from current pawn enumeration; XUID overrides are the stable targeting key.\n",
-		arg0,
 		arg0,
 		arg0,
 		arg0,
@@ -420,7 +416,7 @@ void HookDemoAgent(HMODULE clientDll)
 
 void DemoAgent_OnFrameRenderPass()
 {
-	if (!g_PersistenceEnabled || g_PlayerModelOverrides.empty()) return;
+	if (g_PlayerModelOverrides.empty()) return;
 	applyConfiguredOverrides(false, true);
 }
 
@@ -447,17 +443,6 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 			g_PlayerModelOverrides.clear();
 			g_AppliedModelStates.clear();
 			advancedfx::Message("mirv_demo_agent: cleared all configured model overrides.\n");
-			return;
-		}
-
-		if (0 == _stricmp("persist", arg1)) {
-			if (argc < 3 || (0 != _stricmp("0", args->ArgV(2)) && 0 != _stricmp("1", args->ArgV(2)))) {
-				advancedfx::Warning("mirv_demo_agent: expected persist 0|1.\n");
-				return;
-			}
-
-			g_PersistenceEnabled = 0 != _stricmp("0", args->ArgV(2));
-			advancedfx::Message("mirv_demo_agent: persist=%i.\n", g_PersistenceEnabled ? 1 : 0);
 			return;
 		}
 
