@@ -9,7 +9,6 @@
 
 #include "../deps/release/prop/AfxHookSource/SourceSdkShared.h"
 #include "../deps/release/prop/cs2/sdk_src/public/cdll_int.h"
-#include "../deps/release/Detours/src/detours.h"
 #include "../shared/StringTools.h"
 
 #include <string>
@@ -40,7 +39,6 @@ const AgentModelDefinition kAgentModels[] = {
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
 std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
-bool g_SetModelDetoured = false;
 
 struct AppliedModelState {
 	std::string modelName;
@@ -56,7 +54,6 @@ struct RepairStats {
 };
 
 std::unordered_map<uint64_t, AppliedModelState> g_AppliedModelStates;
-bool g_InAutoRepair = false;
 int g_LastRepairLogTick = -1;
 int g_SuppressedRepairLogs = 0;
 
@@ -246,55 +243,6 @@ bool canSafelyAutoRepair(CEntityInstance* entity)
 	return 0 == (flags & unsafeFlags);
 }
 
-const char* getConfiguredModelForEntity(void* entity)
-{
-	if (!isPlayingDemo() || g_PlayerModelOverrides.empty()) return nullptr;
-
-	auto pawn = (CEntityInstance*)entity;
-	if (!isDemoPlayerPawn(pawn)) return nullptr;
-
-	auto controller = getControllerForPawn(pawn);
-	const uint64_t xuid = getControllerXuid(controller);
-	if (!looksLikeSteamId(xuid)) return nullptr;
-
-	const auto modelIt = g_PlayerModelOverrides.find(xuid);
-	if (g_PlayerModelOverrides.end() == modelIt) return nullptr;
-
-	return modelIt->second.c_str();
-}
-
-bool __fastcall new_SetModel(void* entity, const char* modelName)
-{
-	const char* replacement = getConfiguredModelForEntity(entity);
-	if (replacement && replacement[0] && (!modelName || 0 != _stricmp(modelName, replacement))) {
-		return g_SetModel(entity, replacement);
-	}
-
-	return g_SetModel(entity, modelName);
-}
-
-bool attachSetModelDetour()
-{
-	if (!g_SetModel || g_SetModelDetoured) return true;
-
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
-	const LONG error = DetourAttach(&(PVOID&)g_SetModel, new_SetModel);
-	const LONG commitError = DetourTransactionCommit();
-	if (NO_ERROR != error || NO_ERROR != commitError) {
-		advancedfx::Warning(
-			"mirv_demo_agent: SetModel detour failed attach=%li commit=%li.\n",
-			(long)error,
-			(long)commitError
-		);
-		return false;
-	}
-
-	g_SetModelDetoured = true;
-	advancedfx::Message("mirv_demo_agent: SetModel detour attached.\n");
-	return true;
-}
-
 bool resolveSetModel(HMODULE clientDll, bool print)
 {
 	if (g_SetModel) return true;
@@ -315,7 +263,6 @@ bool resolveSetModel(HMODULE clientDll, bool print)
 			if (print) {
 				advancedfx::Message("mirv_demo_agent: resolved client SetModel candidate at 0x%p.\n", (void*)addr);
 			}
-			attachSetModelDetour();
 			return true;
 		}
 	}
@@ -416,10 +363,8 @@ bool shouldRepairPlayerModel(const PlayerPawnInfo& info, const std::string& mode
 RepairStats repairConfiguredOverrides()
 {
 	RepairStats stats;
-	if (g_InAutoRepair || g_PlayerModelOverrides.empty()) return stats;
+	if (g_PlayerModelOverrides.empty()) return stats;
 	if (!ensureCanApply(false)) return stats;
-
-	g_InAutoRepair = true;
 
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
@@ -440,7 +385,6 @@ RepairStats repairConfiguredOverrides()
 		}
 	}
 
-	g_InAutoRepair = false;
 	return stats;
 }
 
