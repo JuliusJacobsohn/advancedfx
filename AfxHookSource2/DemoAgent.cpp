@@ -39,8 +39,17 @@ struct AppliedModelState {
 	uint32_t modelNameSymbol = 0;
 };
 
+struct RepairStats {
+	int candidates = 0;
+	int repaired = 0;
+	int unsafe = 0;
+	int unchanged = 0;
+};
+
 std::unordered_map<uint64_t, AppliedModelState> g_AppliedModelStates;
 bool g_InAutoRepair = false;
+int g_LastRepairLogTick = -1;
+int g_SuppressedRepairLogs = 0;
 
 struct PlayerPawnInfo {
 	int entry = 0;
@@ -56,6 +65,15 @@ bool isPlayingDemo()
 		return demoFile->IsPlayingDemo();
 	}
 	return false;
+}
+
+int getCurrentDemoTick()
+{
+	if (!g_pEngineToClient) return -1;
+	if (auto demoFile = g_pEngineToClient->GetDemoFile()) {
+		if (demoFile->IsPlayingDemo()) return demoFile->GetDemoTick();
+	}
+	return -1;
 }
 
 const char* resolveModelAlias(const char* arg)
@@ -347,28 +365,35 @@ bool shouldRepairPlayerModel(const PlayerPawnInfo& info, const std::string& mode
 	return currentHandle != state.modelHandle || currentNameSymbol != state.modelNameSymbol;
 }
 
-int repairConfiguredOverrides()
+RepairStats repairConfiguredOverrides()
 {
-	if (g_InAutoRepair || g_PlayerModelOverrides.empty()) return 0;
-	if (!ensureCanApply(false)) return 0;
+	RepairStats stats;
+	if (g_InAutoRepair || g_PlayerModelOverrides.empty()) return stats;
+	if (!ensureCanApply(false)) return stats;
 
 	g_InAutoRepair = true;
 
-	int repaired = 0;
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
 		auto it = g_PlayerModelOverrides.find(player.xuid);
 		if (g_PlayerModelOverrides.end() == it) continue;
 
-		if (!canSafelyAutoRepair(player.pawn)) continue;
-		if (!shouldRepairPlayerModel(player, it->second)) continue;
+		++stats.candidates;
+		if (!canSafelyAutoRepair(player.pawn)) {
+			++stats.unsafe;
+			continue;
+		}
+		if (!shouldRepairPlayerModel(player, it->second)) {
+			++stats.unchanged;
+			continue;
+		}
 		if (applyPlayerModel(player, it->second.c_str(), false)) {
-			++repaired;
+			++stats.repaired;
 		}
 	}
 
 	g_InAutoRepair = false;
-	return repaired;
+	return stats;
 }
 
 int applyConfiguredOverrides(bool print)
@@ -454,10 +479,12 @@ bool setSlotOverride(int slot, const char* modelName)
 void inspectPlayers()
 {
 	advancedfx::Message(
-		"mirv_demo_agent inspect: playingDemo=%i setModel=%p configured=%llu\n",
+		"mirv_demo_agent inspect: playingDemo=%i demoTick=%i setModel=%p configured=%llu remembered=%llu\n",
 		isPlayingDemo() ? 1 : 0,
+		getCurrentDemoTick(),
 		(void*)g_SetModel,
-		(unsigned long long)g_PlayerModelOverrides.size()
+		(unsigned long long)g_PlayerModelOverrides.size(),
+		(unsigned long long)g_AppliedModelStates.size()
 	);
 
 	if (!g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
@@ -486,10 +513,47 @@ void inspectPlayers()
 	}
 }
 
+void printStatus()
+{
+	int configuredPresent = 0;
+	int unsafe = 0;
+	int mismatched = 0;
+
+	if (g_pEntityList && *g_pEntityList && g_GetEntityFromIndex) {
+		const auto players = collectPlayerPawns();
+		for (const auto& player : players) {
+			auto it = g_PlayerModelOverrides.find(player.xuid);
+			if (g_PlayerModelOverrides.end() == it) continue;
+
+			++configuredPresent;
+			if (!canSafelyAutoRepair(player.pawn)) {
+				++unsafe;
+				continue;
+			}
+			if (shouldRepairPlayerModel(player, it->second)) {
+				++mismatched;
+			}
+		}
+	}
+
+	advancedfx::Message(
+		"mirv_demo_agent status: playingDemo=%i demoTick=%i configured=%llu remembered=%llu present=%i unsafe=%i mismatched=%i setModel=%p\n",
+		isPlayingDemo() ? 1 : 0,
+		getCurrentDemoTick(),
+		(unsigned long long)g_PlayerModelOverrides.size(),
+		(unsigned long long)g_AppliedModelStates.size(),
+		configuredPresent,
+		unsafe,
+		mismatched,
+		(void*)g_SetModel
+	);
+}
+
 void printHelp(const char* arg0)
 {
 	advancedfx::Message(
 		"%s inspect - Print current player pawn slots, XUIDs, model state, and configured overrides.\n"
+		"%s status - Print a concise override / repair status summary.\n"
 		"%s xuid <steamid64> set vypa|<modelPath> - Configure and apply one player's model.\n"
 		"%s xuid <steamid64> clear - Clear one player's configured model.\n"
 		"%s slot <1-10> set vypa|<modelPath> - Configure and apply the current slot's model by resolved XUID.\n"
@@ -500,6 +564,7 @@ void printHelp(const char* arg0)
 		"Notes:\n"
 		"\tPrototype for local demo playback / recording only. Requires -insecure and active demo playback.\n"
 		"\tSlot numbers are temporary helpers from current pawn enumeration; XUID overrides are the stable targeting key.\n",
+		arg0,
 		arg0,
 		arg0,
 		arg0,
@@ -521,14 +586,33 @@ void DemoAgent_OnClientFrameStageNotify(int curStage, bool isAfter)
 {
 	if (!isAfter) return;
 
-	const int repaired = repairConfiguredOverrides();
-	if (0 < repaired) {
-		advancedfx::Message(
-			"mirv_demo_agent: repaired %i configured model override(s) after frame stage %i.\n",
-			repaired,
-			curStage
-		);
+	const RepairStats stats = repairConfiguredOverrides();
+	if (stats.repaired <= 0) return;
+
+	const int demoTick = getCurrentDemoTick();
+	if (demoTick == g_LastRepairLogTick) {
+		++g_SuppressedRepairLogs;
+		return;
 	}
+
+	if (0 < g_SuppressedRepairLogs) {
+		advancedfx::Message(
+			"mirv_demo_agent: suppressed %i repeated repair log(s).\n",
+			g_SuppressedRepairLogs
+		);
+		g_SuppressedRepairLogs = 0;
+	}
+
+	g_LastRepairLogTick = demoTick;
+	advancedfx::Message(
+		"mirv_demo_agent: repaired %i configured model override(s) after frame stage %i demoTick=%i candidates=%i unsafe=%i unchanged=%i.\n",
+		stats.repaired,
+		curStage,
+		demoTick,
+		stats.candidates,
+		stats.unsafe,
+		stats.unchanged
+	);
 }
 
 CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent overrides.")
@@ -541,6 +625,11 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 		if (0 == _stricmp("inspect", arg1)) {
 			inspectPlayers();
+			return;
+		}
+
+		if (0 == _stricmp("status", arg1)) {
+			printStatus();
 			return;
 		}
 
