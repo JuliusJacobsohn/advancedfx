@@ -12,6 +12,7 @@
 #include "ReShadeAdvancedfx.h"
 #include "CamIO.h"
 #include "ViewModel.h"
+#include "DemoAgent.h"
 #include "Globals.h"
 #include "DeathMsg.h"
 #include "ReplaceName.h"
@@ -1503,6 +1504,7 @@ void  new_CS2_Client_FrameStageNotify(void* This, SOURCESDK::CS2::ClientFrameSta
 	switch(curStage) {
 	case SOURCESDK::CS2::FRAME_RENDER_PASS:
 		g_CommandSystem.OnExecuteCommands();
+		DemoAgent_OnFrameRenderPass();
 		break;
 	}
 
@@ -2149,6 +2151,8 @@ void LibraryHooksW(HMODULE hModule, LPCWSTR lpLibFileName)
 		HookMirvCommands(hModule);
 
 		HookViewmodel(hModule);
+
+		HookDemoAgent(hModule);
 
 		HookDeathMsg(hModule);
 

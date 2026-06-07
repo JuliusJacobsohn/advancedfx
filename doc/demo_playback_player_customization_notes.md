@@ -21,6 +21,14 @@ Current implementation status:
 | Player color | Done | `mirv_player_color` writes `CCSPlayerController::m_iCompTeammateColor`; verified for HUD/chat color in the Inferno test demo and good enough for local fragmovie/demo-render use. |
 | Avatars | Done | `mirv_avatar` replaces demo player avatars with avatars resolved from another SteamID64; verified for top bar, scoreboard, and bottom spectator bar without overlay panels. |
 | Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
+| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply a Vypa model override once to all real `C_CSPlayerPawn` entities. Repeat-per-frame application is disabled after crash reports. |
+
+Agent model prototype notes:
+
+- Built-in alias: `vypa -> agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl`, from item def `4777` / `customplayer_tm_jungle_raider_variante`.
+- Stable command sequence for the test demo: `mirv_demo_agent inspect`, `mirv_demo_agent all set vypa`, `mirv_demo_agent apply`, `mirv_demo_agent inspect`.
+- 2026-06-07 verification on `replays/match730_003816038387630997543_1135542072_274.dem`: inspect listed 10 `C_CSPlayerPawn` entries; single apply changed all 10 to one shared model handle/name symbol and exited cleanly through scheduled `quit`.
+- Avoid applying to `C_CSObserverPawn` entries and avoid automatic frame-by-frame `SetModel` calls while this remains experimental.
 
 Shared implementation constraints:
 

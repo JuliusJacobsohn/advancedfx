@@ -229,6 +229,9 @@ target_sources(${PROJECT_NAME} PRIVATE
     ConsoleRs.cpp
     CVarRs.cpp
 
+	DemoAgent.cpp
+	DemoAgent.h
+
 	DeathMsg.cpp
 	DeathMsg.h
 
