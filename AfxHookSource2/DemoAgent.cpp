@@ -20,7 +20,6 @@ extern SOURCESDK::CS2::ISource2EngineToClient* g_pEngineToClient;
 
 namespace {
 
-constexpr const char* kVypaModel = "agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl";
 constexpr uint32_t kEntityFlagSpawnInProgress = 0x2;
 constexpr uint32_t kEntityFlagInStagingList = 0x4;
 constexpr uint32_t kEntityFlagDeleteInProgress = 0x10;
@@ -28,6 +27,16 @@ constexpr uint32_t kEntityFlagMarkedForDelete = 0x200;
 constexpr uint32_t kEntityFlagConstructionInProgress = 0x400;
 
 using CBaseModelEntity_SetModel_t = bool(__fastcall*)(void* entity, const char* modelName);
+
+struct AgentModelDefinition {
+	int itemDef = 0;
+	const char* name = nullptr;
+	const char* modelPath = nullptr;
+};
+
+const AgentModelDefinition kAgentModels[] = {
+#include "DemoAgentModels.inc"
+};
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
 std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
@@ -76,10 +85,49 @@ int getCurrentDemoTick()
 	return -1;
 }
 
-const char* resolveModelAlias(const char* arg)
+const AgentModelDefinition* findAgentModel(const char* arg)
 {
 	if (!arg || !arg[0]) return nullptr;
-	if (0 == _stricmp(arg, "vypa")) return kVypaModel;
+
+	char* end = nullptr;
+	const long itemDef = strtol(arg, &end, 10);
+	const bool isItemDef = end && !*end && 0 < itemDef;
+
+	for (const auto& agent : kAgentModels) {
+		if (isItemDef && agent.itemDef == itemDef) return &agent;
+		if (agent.name && 0 == _stricmp(arg, agent.name)) return &agent;
+	}
+
+	return nullptr;
+}
+
+const char* resolveModelArgument(const char* arg, bool print)
+{
+	if (!arg || !arg[0]) return nullptr;
+
+	if (const auto agent = findAgentModel(arg)) {
+		if (print) {
+			advancedfx::Message(
+				"mirv_demo_agent: resolved %s to %s.\n",
+				arg,
+				agent->modelPath
+			);
+		}
+		return agent->modelPath;
+	}
+
+	if (0 == _strnicmp(arg, "customplayer_", 13)) {
+		if (print) advancedfx::Warning("mirv_demo_agent: unknown agent internal name %s.\n", arg);
+		return nullptr;
+	}
+
+	char* end = nullptr;
+	const long itemDef = strtol(arg, &end, 10);
+	if (end && !*end && 0 < itemDef) {
+		if (print) advancedfx::Warning("mirv_demo_agent: unknown agent item definition ID %li.\n", itemDef);
+		return nullptr;
+	}
+
 	return arg;
 }
 
@@ -549,18 +597,25 @@ void printStatus()
 	);
 }
 
+void listAgentModels()
+{
+	advancedfx::Message("itemDef / internalName / modelPath\n");
+	for (const auto& agent : kAgentModels) {
+		advancedfx::Message("%i / %s / %s\n", agent.itemDef, agent.name, agent.modelPath);
+	}
+}
+
 void printHelp(const char* arg0)
 {
 	advancedfx::Message(
 		"%s inspect - Print current player pawn slots, XUIDs, model state, and configured overrides.\n"
 		"%s status - Print a concise override / repair status summary.\n"
-		"%s xuid <steamid64> set vypa|<modelPath> - Configure and apply one player's model.\n"
+		"%s agents - List known agent item definition IDs, internal names, and model paths.\n"
+		"%s xuid <steamid64> set <agentInternalName|itemDef|modelPath> - Configure and apply one player's model.\n"
 		"%s xuid <steamid64> clear - Clear one player's configured model.\n"
-		"%s slot <1-10> set vypa|<modelPath> - Configure and apply the current slot's model by resolved XUID.\n"
+		"%s slot <1-10> set <agentInternalName|itemDef|modelPath> - Configure and apply the current slot's model by resolved XUID.\n"
 		"%s apply - Apply all configured XUID model overrides once during demo playback.\n"
 		"%s clear - Clear all configured model overrides.\n"
-		"Built-in aliases:\n"
-		"\tvypa -> %s\n"
 		"Notes:\n"
 		"\tPrototype for local demo playback / recording only. Requires -insecure and active demo playback.\n"
 		"\tSlot numbers are temporary helpers from current pawn enumeration; XUID overrides are the stable targeting key.\n",
@@ -571,7 +626,7 @@ void printHelp(const char* arg0)
 		arg0,
 		arg0,
 		arg0,
-		kVypaModel
+		arg0
 	);
 }
 
@@ -633,6 +688,11 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 			return;
 		}
 
+		if (0 == _stricmp("agents", arg1)) {
+			listAgentModels();
+			return;
+		}
+
 		if (0 == _stricmp("apply", arg1)) {
 			const int applied = applyConfiguredOverrides(true);
 			advancedfx::Message("mirv_demo_agent apply: applied %i configured player model override(s).\n", applied);
@@ -655,11 +715,11 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 			if (0 == _stricmp("set", args->ArgV(3))) {
 				if (argc < 5) {
-					advancedfx::Warning("mirv_demo_agent: expected xuid <steamid64> set vypa|<modelPath>.\n");
+					advancedfx::Warning("mirv_demo_agent: expected xuid <steamid64> set <agentInternalName|itemDef|modelPath>.\n");
 					return;
 				}
 
-				const char* model = resolveModelAlias(args->ArgV(4));
+				const char* model = resolveModelArgument(args->ArgV(4), true);
 				setXuidOverride(xuid, model, true);
 				return;
 			}
@@ -683,11 +743,11 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 		if (0 == _stricmp("slot", arg1)) {
 			int slot = 0;
 			if (argc < 5 || !parseSlot(args->ArgV(2), slot) || 0 != _stricmp("set", args->ArgV(3))) {
-				advancedfx::Warning("mirv_demo_agent: expected slot <1-10> set vypa|<modelPath>.\n");
+				advancedfx::Warning("mirv_demo_agent: expected slot <1-10> set <agentInternalName|itemDef|modelPath>.\n");
 				return;
 			}
 
-			const char* model = resolveModelAlias(args->ArgV(4));
+			const char* model = resolveModelArgument(args->ArgV(4), true);
 			setSlotOverride(slot, model);
 			return;
 		}

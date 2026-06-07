@@ -25,9 +25,9 @@ Current implementation status:
 
 Agent model prototype notes:
 
-- Built-in alias: `vypa -> agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl`, from item def `4777` / `customplayer_tm_jungle_raider_variante`.
-- Stable command sequence for a specific player: `mirv_demo_agent inspect`, `mirv_demo_agent xuid <steamid64> set vypa`, `mirv_demo_agent inspect`.
-- Manual test helper: `mirv_demo_agent slot <1-10> set vypa`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
+- Agent values can be direct `agents/models/...vmdl` paths, numeric item definition IDs, or internal `customplayer_*` names. Full list: [cs2_agent_models.md](cs2_agent_models.md).
+- Stable command sequence for a specific player: `mirv_demo_agent inspect`, `mirv_demo_agent xuid <steamid64> set customplayer_tm_jungle_raider_variante`, `mirv_demo_agent inspect`.
+- Manual test helper: `mirv_demo_agent slot <1-10> set customplayer_tm_jungle_raider_variante`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
 - Use `mirv_demo_agent apply` to re-apply all currently configured XUID overrides once.
 - Configured XUID overrides are applied through a detour on the client `CBaseModelEntity_SetModel` candidate. When CS2 assigns a model to a `C_CSPlayerPawn`, the hook resolves pawn -> controller -> XUID and substitutes the configured model before the original assignment runs. `mirv_demo_agent apply` remains only as an immediate helper for already-spawned pawns.
 - 2026-06-07 skip/rewind finding: demo seeking can restore player model state without hitting the current `SetModel` detour. The prototype now records the target `CModelState` handle/name symbol after applying an override and checks configured player pawns after client frame-stage notifications. If a configured pawn no longer matches its remembered target model state, the override is applied again.
