@@ -9,6 +9,7 @@
 
 #include "../deps/release/prop/AfxHookSource/SourceSdkShared.h"
 #include "../deps/release/prop/cs2/sdk_src/public/cdll_int.h"
+#include "../deps/release/Detours/src/detours.h"
 #include "../shared/StringTools.h"
 
 #include <string>
@@ -25,6 +26,7 @@ using CBaseModelEntity_SetModel_t = bool(__fastcall*)(void* entity, const char* 
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
 std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
+bool g_SetModelDetoured = false;
 
 struct PlayerPawnInfo {
 	int entry = 0;
@@ -32,15 +34,6 @@ struct PlayerPawnInfo {
 	CEntityInstance* controller = nullptr;
 	uint64_t xuid = 0;
 };
-
-struct AppliedModelState {
-	CEntityInstance* pawn = nullptr;
-	std::string modelName;
-	uintptr_t modelHandle = 0;
-	uint32_t modelNameSymbol = 0;
-};
-
-std::unordered_map<uint64_t, AppliedModelState> g_AppliedModelStates;
 
 bool isPlayingDemo()
 {
@@ -150,6 +143,55 @@ uint32_t getModelNameSymbol(CEntityInstance* entity)
 	return *(uint32_t*)(modelState + g_clientDllOffsets.CModelState.m_ModelName);
 }
 
+const char* getConfiguredModelForEntity(void* entity)
+{
+	if (!isPlayingDemo() || g_PlayerModelOverrides.empty()) return nullptr;
+
+	auto pawn = (CEntityInstance*)entity;
+	if (!isDemoPlayerPawn(pawn)) return nullptr;
+
+	auto controller = getControllerForPawn(pawn);
+	const uint64_t xuid = getControllerXuid(controller);
+	if (!looksLikeSteamId(xuid)) return nullptr;
+
+	const auto modelIt = g_PlayerModelOverrides.find(xuid);
+	if (g_PlayerModelOverrides.end() == modelIt) return nullptr;
+
+	return modelIt->second.c_str();
+}
+
+bool __fastcall new_SetModel(void* entity, const char* modelName)
+{
+	const char* replacement = getConfiguredModelForEntity(entity);
+	if (replacement && replacement[0] && (!modelName || 0 != _stricmp(modelName, replacement))) {
+		return g_SetModel(entity, replacement);
+	}
+
+	return g_SetModel(entity, modelName);
+}
+
+bool attachSetModelDetour()
+{
+	if (!g_SetModel || g_SetModelDetoured) return true;
+
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+	const LONG error = DetourAttach(&(PVOID&)g_SetModel, new_SetModel);
+	const LONG commitError = DetourTransactionCommit();
+	if (NO_ERROR != error || NO_ERROR != commitError) {
+		advancedfx::Warning(
+			"mirv_demo_agent: SetModel detour failed attach=%li commit=%li.\n",
+			(long)error,
+			(long)commitError
+		);
+		return false;
+	}
+
+	g_SetModelDetoured = true;
+	advancedfx::Message("mirv_demo_agent: SetModel detour attached.\n");
+	return true;
+}
+
 bool resolveSetModel(HMODULE clientDll, bool print)
 {
 	if (g_SetModel) return true;
@@ -170,6 +212,7 @@ bool resolveSetModel(HMODULE clientDll, bool print)
 			if (print) {
 				advancedfx::Message("mirv_demo_agent: resolved client SetModel candidate at 0x%p.\n", (void*)addr);
 			}
+			attachSetModelDetour();
 			return true;
 		}
 	}
@@ -232,13 +275,6 @@ bool applyPlayerModel(const PlayerPawnInfo& info, const char* modelName, bool pr
 
 	g_SetModel(info.pawn, modelName);
 
-	AppliedModelState state;
-	state.pawn = info.pawn;
-	state.modelName = modelName;
-	state.modelHandle = getModelHandle(info.pawn);
-	state.modelNameSymbol = getModelNameSymbol(info.pawn);
-	g_AppliedModelStates[info.xuid] = state;
-
 	if (print) {
 		advancedfx::Message(
 			"mirv_demo_agent: applied slotEntry=%i xuid=%s%llu name=%s model=%s\n",
@@ -253,23 +289,7 @@ bool applyPlayerModel(const PlayerPawnInfo& info, const char* modelName, bool pr
 	return true;
 }
 
-bool needsApply(const PlayerPawnInfo& info, const char* modelName)
-{
-	if (!modelName || !modelName[0] || !info.pawn) return false;
-
-	const auto stateIt = g_AppliedModelStates.find(info.xuid);
-	if (g_AppliedModelStates.end() == stateIt) return true;
-
-	const auto& state = stateIt->second;
-	if (state.pawn != info.pawn) return true;
-	if (state.modelName != modelName) return true;
-	if (state.modelHandle != getModelHandle(info.pawn)) return true;
-	if (state.modelNameSymbol != getModelNameSymbol(info.pawn)) return true;
-
-	return false;
-}
-
-int applyConfiguredOverrides(bool print, bool onlyIfNeeded)
+int applyConfiguredOverrides(bool print)
 {
 	if (!ensureCanApply(print)) return 0;
 
@@ -278,7 +298,6 @@ int applyConfiguredOverrides(bool print, bool onlyIfNeeded)
 	for (const auto& player : players) {
 		auto it = g_PlayerModelOverrides.find(player.xuid);
 		if (g_PlayerModelOverrides.end() == it) continue;
-		if (onlyIfNeeded && !needsApply(player, it->second.c_str())) continue;
 
 		if (applyPlayerModel(player, it->second.c_str(), print)) {
 			++applied;
@@ -414,12 +433,6 @@ void HookDemoAgent(HMODULE clientDll)
 	resolveSetModel(clientDll, true);
 }
 
-void DemoAgent_OnFrameRenderPass()
-{
-	if (g_PlayerModelOverrides.empty()) return;
-	applyConfiguredOverrides(false, true);
-}
-
 CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent overrides.")
 {
 	const char* arg0 = args->ArgV(0);
@@ -434,14 +447,13 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 		}
 
 		if (0 == _stricmp("apply", arg1)) {
-			const int applied = applyConfiguredOverrides(true, false);
+			const int applied = applyConfiguredOverrides(true);
 			advancedfx::Message("mirv_demo_agent apply: applied %i configured player model override(s).\n", applied);
 			return;
 		}
 
 		if (0 == _stricmp("clear", arg1)) {
 			g_PlayerModelOverrides.clear();
-			g_AppliedModelStates.clear();
 			advancedfx::Message("mirv_demo_agent: cleared all configured model overrides.\n");
 			return;
 		}
@@ -466,7 +478,6 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 			if (0 == _stricmp("clear", args->ArgV(3))) {
 				const auto erased = g_PlayerModelOverrides.erase(xuid);
-				g_AppliedModelStates.erase(xuid);
 				advancedfx::Message(
 					"mirv_demo_agent: %s override for xuid=%s%llu.\n",
 					erased ? "cleared" : "had no",

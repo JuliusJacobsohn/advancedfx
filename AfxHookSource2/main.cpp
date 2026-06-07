@@ -1504,7 +1504,6 @@ void  new_CS2_Client_FrameStageNotify(void* This, SOURCESDK::CS2::ClientFrameSta
 	switch(curStage) {
 	case SOURCESDK::CS2::FRAME_RENDER_PASS:
 		g_CommandSystem.OnExecuteCommands();
-		DemoAgent_OnFrameRenderPass();
 		break;
 	}
 
