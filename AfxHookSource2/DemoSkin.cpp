@@ -54,13 +54,52 @@ struct ApplyStats {
 	int skipped = 0;
 };
 
-std::unordered_map<uint64_t, SkinRule> g_SkinRules;
+std::unordered_map<uint64_t, std::vector<SkinRule>> g_SkinRules;
+bool g_WarnedMissingOffsets = false;
 
 bool isPlayingDemo()
 {
 	if (!g_pEngineToClient) return false;
 	if (auto demoFile = g_pEngineToClient->GetDemoFile()) {
 		return demoFile->IsPlayingDemo();
+	}
+	return false;
+}
+
+bool hasCoreWeaponOffsets()
+{
+	return
+		0 != g_clientDllOffsets.C_BasePlayerPawn.m_pWeaponServices &&
+		0 != g_clientDllOffsets.CPlayer_WeaponServices.m_hActiveWeapon &&
+		0 != g_clientDllOffsets.C_EconEntity.m_AttributeManager &&
+		0 != g_clientDllOffsets.C_EconEntity.m_bAttributesInitialized &&
+		0 != g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidLow &&
+		0 != g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidHigh &&
+		0 != g_clientDllOffsets.C_EconEntity.m_nFallbackPaintKit &&
+		0 != g_clientDllOffsets.C_EconEntity.m_nFallbackSeed &&
+		0 != g_clientDllOffsets.C_EconEntity.m_flFallbackWear &&
+		0 != g_clientDllOffsets.C_EconEntity.m_nFallbackStatTrak &&
+		0 != g_clientDllOffsets.C_AttributeContainer.m_Item &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iItemDefinitionIndex &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iEntityQuality &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iItemID &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iItemIDHigh &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iItemIDLow &&
+		0 != g_clientDllOffsets.C_EconItemView.m_iAccountID &&
+		0 != g_clientDllOffsets.C_EconItemView.m_bInitialized;
+}
+
+bool hasGloveOffsets()
+{
+	return hasCoreWeaponOffsets() && 0 != g_clientDllOffsets.CCSPlayerPawn.m_EconGloves;
+}
+
+bool ensureSkinOffsets(bool print)
+{
+	if (hasCoreWeaponOffsets()) return true;
+	if (print || !g_WarnedMissingOffsets) {
+		g_WarnedMissingOffsets = true;
+		advancedfx::Warning("mirv_demo_skin: required skin schema offsets are not available in this CS2 build.\n");
 	}
 	return false;
 }
@@ -217,6 +256,7 @@ std::vector<CEntityInstance*> getAllWeapons(CEntityInstance* pawn)
 
 	auto weaponServices = getWeaponServices(pawn);
 	if (!weaponServices) return result;
+	if (0 == g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons) return result;
 
 	auto vector = weaponServices + g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons;
 	const int count = *(int*)vector;
@@ -265,6 +305,7 @@ unsigned char* getModelState(CEntityInstance* entity)
 void applyMeshGroup(CEntityInstance* entity, const SkinRule& rule)
 {
 	if (!rule.hasMeshGroup) return;
+	if (0 == g_clientDllOffsets.CModelState.m_MeshGroupMask) return;
 
 	auto modelState = getModelState(entity);
 	if (!modelState) return;
@@ -368,6 +409,7 @@ bool patchWeapon(CEntityInstance* weapon, SkinRule& rule, uint64_t ownerXuid, bo
 bool patchGloves(CEntityInstance* pawn, const SkinRule& rule, uint64_t ownerXuid, bool print)
 {
 	if (!pawn || 0 >= rule.itemDefIndex) return false;
+	if (!hasGloveOffsets()) return false;
 
 	auto itemView = (unsigned char*)pawn + g_clientDllOffsets.CCSPlayerPawn.m_EconGloves;
 	const int oldDef = getItemDefinitionIndex(itemView);
@@ -420,11 +462,14 @@ bool applyRuleToPlayer(const PlayerPawnInfo& player, SkinRule& rule, bool print,
 ApplyStats applyConfiguredRules(bool print)
 {
 	ApplyStats stats;
-	stats.configured = (int)g_SkinRules.size();
+	for (const auto& entry : g_SkinRules) {
+		stats.configured += (int)entry.second.size();
+	}
 
 	if (!isPlayingDemo() || !g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
 		return stats;
 	}
+	if (!ensureSkinOffsets(false)) return stats;
 
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
@@ -432,7 +477,9 @@ ApplyStats applyConfiguredRules(bool print)
 		if (it == g_SkinRules.end()) continue;
 
 		++stats.present;
-		applyRuleToPlayer(player, it->second, print, &stats);
+		for (auto& rule : it->second) {
+			applyRuleToPlayer(player, rule, print, &stats);
+		}
 	}
 
 	return stats;
@@ -494,7 +541,22 @@ const char* targetName(SkinTarget target)
 
 void setRule(uint64_t xuid, const SkinRule& rule)
 {
-	g_SkinRules[xuid] = rule;
+	auto& rules = g_SkinRules[xuid];
+	rules.erase(
+		std::remove_if(
+			rules.begin(),
+			rules.end(),
+			[&rule](const SkinRule& existing) {
+				if (existing.target != rule.target) return false;
+				if (rule.target == SkinTarget::Gloves) return true;
+				if (0 == rule.weaponDefIndex) return existing.itemDefIndex == rule.itemDefIndex;
+				return existing.weaponDefIndex == rule.weaponDefIndex && existing.itemDefIndex == rule.itemDefIndex;
+			}
+		),
+		rules.end()
+	);
+	rules.push_back(rule);
+
 	advancedfx::Message(
 		"mirv_demo_skin: configured xuid=x%llu target=%s paintKit=%i seed=%i wear=%.6f statTrak=%s%i weaponDef=%i itemDef=%i meshGroup=%s0x%llx\n",
 		(unsigned long long)xuid,
@@ -519,14 +581,16 @@ void printStatus()
 {
 	const ApplyStats stats = applyConfiguredRules(false);
 	advancedfx::Message(
-		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i candidates=%i patched=%i skipped=%i\n",
+		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i candidates=%i patched=%i skipped=%i coreOffsets=%i gloveOffsets=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		stats.configured,
 		stats.present,
 		stats.candidates,
 		stats.patched,
-		stats.skipped
+		stats.skipped,
+		hasCoreWeaponOffsets() ? 1 : 0,
+		hasGloveOffsets() ? 1 : 0
 	);
 }
 
@@ -534,35 +598,45 @@ void printRules()
 {
 	advancedfx::Message("xuid / target / paintKit / seed / wear / statTrak / weaponDef / itemDef / meshGroup\n");
 	for (const auto& entry : g_SkinRules) {
-		const auto& rule = entry.second;
-		advancedfx::Message(
-			"x%llu / %s / %i / %i / %.6f / %s%i / %i / %i / %s0x%llx\n",
-			(unsigned long long)entry.first,
-			targetName(rule.target),
-			rule.paintKit,
-			rule.seed,
-			rule.wear,
-			rule.hasStatTrak ? "" : "<unset>/",
-			rule.hasStatTrak ? rule.statTrak : -1,
-			rule.weaponDefIndex,
-			rule.itemDefIndex,
-			rule.hasMeshGroup ? "" : "<unset>/",
-			(unsigned long long)rule.meshGroup
-		);
+		for (const auto& rule : entry.second) {
+			advancedfx::Message(
+				"x%llu / %s / %i / %i / %.6f / %s%i / %i / %i / %s0x%llx\n",
+				(unsigned long long)entry.first,
+				targetName(rule.target),
+				rule.paintKit,
+				rule.seed,
+				rule.wear,
+				rule.hasStatTrak ? "" : "<unset>/",
+				rule.hasStatTrak ? rule.statTrak : -1,
+				rule.weaponDefIndex,
+				rule.itemDefIndex,
+				rule.hasMeshGroup ? "" : "<unset>/",
+				(unsigned long long)rule.meshGroup
+			);
+		}
 	}
 }
 
 void inspect()
 {
+	int configuredRules = 0;
+	for (const auto& entry : g_SkinRules) {
+		configuredRules += (int)entry.second.size();
+	}
+
 	advancedfx::Message(
-		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu\n",
+		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu coreOffsets=%i gloveOffsets=%i myWeapons=%i meshGroup=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
-		(unsigned long long)g_SkinRules.size()
+		(unsigned long long)configuredRules,
+		hasCoreWeaponOffsets() ? 1 : 0,
+		hasGloveOffsets() ? 1 : 0,
+		0 != g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons ? 1 : 0,
+		0 != g_clientDllOffsets.CModelState.m_MeshGroupMask ? 1 : 0
 	);
 
 	const auto players = collectPlayerPawns();
-	advancedfx::Message("slot / pawnEntry / xuid / name / activeWeaponEntry / activeClass / activeDef / configuredTarget\n");
+	advancedfx::Message("slot / pawnEntry / xuid / name / activeWeaponEntry / activeClass / activeDef / configuredRuleCount\n");
 	for (size_t i = 0; i < players.size(); ++i) {
 		const auto& player = players[i];
 		auto active = getEntityFromHandle(player.pawn->GetActiveWeaponHandle());
@@ -570,7 +644,7 @@ void inspect()
 		if (active) activeDef = getItemDefinitionIndex(getItemViewFromEconEntity(active));
 		const auto ruleIt = g_SkinRules.find(player.xuid);
 		advancedfx::Message(
-			"%llu / %i / x%llu / %s / %i / %s / %i / %s\n",
+			"%llu / %i / x%llu / %s / %i / %s / %i / %llu\n",
 			(unsigned long long)(i + 1),
 			player.entry,
 			(unsigned long long)player.xuid,
@@ -578,7 +652,7 @@ void inspect()
 			active ? active->GetHandle().GetEntryIndex() : -1,
 			active && active->GetClientClassName() ? active->GetClientClassName() : "",
 			activeDef,
-			ruleIt == g_SkinRules.end() ? "<none>" : targetName(ruleIt->second.target)
+			ruleIt == g_SkinRules.end() ? 0ULL : (unsigned long long)ruleIt->second.size()
 		);
 	}
 }

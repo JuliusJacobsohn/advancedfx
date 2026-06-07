@@ -81,6 +81,11 @@ bool getOffset(ptrdiff_t* offset, std::string moduleName, std::string className,
 	return true;
 }
 
+void getOptionalOffset(ptrdiff_t* offset, std::string moduleName, std::string className, std::string fieldName)
+{
+	getOffset(offset, moduleName, className, fieldName);
+}
+
 void initSchemaSystemOffsets()
 {
 	bool bOk = true;
@@ -99,7 +104,7 @@ void initSchemaSystemOffsets()
 	bOk = bOk && getOffset(&g_clientDllOffsets.CSkeletonInstance.m_modelState, "client.dll", "CSkeletonInstance", "m_modelState");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CModelState.m_hModel, "client.dll", "CModelState", "m_hModel");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CModelState.m_ModelName, "client.dll", "CModelState", "m_ModelName");
-	bOk = bOk && getOffset(&g_clientDllOffsets.CModelState.m_MeshGroupMask, "client.dll", "CModelState", "m_MeshGroupMask");
+	getOptionalOffset(&g_clientDllOffsets.CModelState.m_MeshGroupMask, "client.dll", "CModelState", "m_MeshGroupMask");
 	bOk = bOk && getOffset(&g_clientDllOffsets.C_BaseModelEntity.m_Glow, "client.dll", "C_BaseModelEntity", "m_Glow");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CGameSceneNode.m_pOwner, "client.dll", "CGameSceneNode", "m_pOwner");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CGameSceneNode.m_pParent, "client.dll", "CGameSceneNode", "m_pParent");
@@ -114,24 +119,24 @@ void initSchemaSystemOffsets()
 	bOk = bOk && getOffset(&g_clientDllOffsets.C_BasePlayerPawn.m_pObserverServices, "client.dll", "C_BasePlayerPawn", "m_pObserverServices");
 	bOk = bOk && getOffset(&g_clientDllOffsets.C_BasePlayerPawn.m_pCameraServices, "client.dll", "C_BasePlayerPawn", "m_pCameraServices");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_WeaponServices.m_hActiveWeapon, "client.dll", "CPlayer_WeaponServices", "m_hActiveWeapon");
-	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons, "client.dll", "CPlayer_WeaponServices", "m_hMyWeapons");
-	bOk = bOk && getOffset(&g_clientDllOffsets.CCSPlayerPawn.m_EconGloves, "client.dll", "CCSPlayerPawn", "m_EconGloves");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_AttributeManager, "client.dll", "C_EconEntity", "m_AttributeManager");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_bAttributesInitialized, "client.dll", "C_EconEntity", "m_bAttributesInitialized");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidLow, "client.dll", "C_EconEntity", "m_OriginalOwnerXuidLow");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidHigh, "client.dll", "C_EconEntity", "m_OriginalOwnerXuidHigh");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackPaintKit, "client.dll", "C_EconEntity", "m_nFallbackPaintKit");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackSeed, "client.dll", "C_EconEntity", "m_nFallbackSeed");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_flFallbackWear, "client.dll", "C_EconEntity", "m_flFallbackWear");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackStatTrak, "client.dll", "C_EconEntity", "m_nFallbackStatTrak");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_AttributeContainer.m_Item, "client.dll", "C_AttributeContainer", "m_Item");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemDefinitionIndex, "client.dll", "C_EconItemView", "m_iItemDefinitionIndex");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iEntityQuality, "client.dll", "C_EconItemView", "m_iEntityQuality");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemID, "client.dll", "C_EconItemView", "m_iItemID");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDHigh, "client.dll", "C_EconItemView", "m_iItemIDHigh");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDLow, "client.dll", "C_EconItemView", "m_iItemIDLow");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_iAccountID, "client.dll", "C_EconItemView", "m_iAccountID");
-	bOk = bOk && getOffset(&g_clientDllOffsets.C_EconItemView.m_bInitialized, "client.dll", "C_EconItemView", "m_bInitialized");
+	getOptionalOffset(&g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons, "client.dll", "CPlayer_WeaponServices", "m_hMyWeapons");
+	if (!getOffset(&g_clientDllOffsets.CCSPlayerPawn.m_EconGloves, "client.dll", "C_CSPlayerPawn", "m_EconGloves")) getOptionalOffset(&g_clientDllOffsets.CCSPlayerPawn.m_EconGloves, "client.dll", "CCSPlayerPawn", "m_EconGloves");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_AttributeManager, "client.dll", "C_EconEntity", "m_AttributeManager");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_bAttributesInitialized, "client.dll", "C_EconEntity", "m_bAttributesInitialized");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidLow, "client.dll", "C_EconEntity", "m_OriginalOwnerXuidLow");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_OriginalOwnerXuidHigh, "client.dll", "C_EconEntity", "m_OriginalOwnerXuidHigh");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackPaintKit, "client.dll", "C_EconEntity", "m_nFallbackPaintKit");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackSeed, "client.dll", "C_EconEntity", "m_nFallbackSeed");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_flFallbackWear, "client.dll", "C_EconEntity", "m_flFallbackWear");
+	getOptionalOffset(&g_clientDllOffsets.C_EconEntity.m_nFallbackStatTrak, "client.dll", "C_EconEntity", "m_nFallbackStatTrak");
+	getOptionalOffset(&g_clientDllOffsets.C_AttributeContainer.m_Item, "client.dll", "C_AttributeContainer", "m_Item");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemDefinitionIndex, "client.dll", "C_EconItemView", "m_iItemDefinitionIndex")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iItemDefinitionIndex, "client.dll", "CEconItemView", "m_iItemDefinitionIndex");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iEntityQuality, "client.dll", "C_EconItemView", "m_iEntityQuality")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iEntityQuality, "client.dll", "CEconItemView", "m_iEntityQuality");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemID, "client.dll", "C_EconItemView", "m_iItemID")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iItemID, "client.dll", "CEconItemView", "m_iItemID");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDHigh, "client.dll", "C_EconItemView", "m_iItemIDHigh")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDHigh, "client.dll", "CEconItemView", "m_iItemIDHigh");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDLow, "client.dll", "C_EconItemView", "m_iItemIDLow")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDLow, "client.dll", "CEconItemView", "m_iItemIDLow");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iAccountID, "client.dll", "C_EconItemView", "m_iAccountID")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iAccountID, "client.dll", "CEconItemView", "m_iAccountID");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_bInitialized, "client.dll", "C_EconItemView", "m_bInitialized")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_bInitialized, "client.dll", "CEconItemView", "m_bInitialized");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_CameraServices.m_hViewEntity, "client.dll", "CPlayer_CameraServices", "m_hViewEntity");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_ObserverServices.m_iObserverMode, "client.dll", "CPlayer_ObserverServices", "m_iObserverMode");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_ObserverServices.m_hObserverTarget, "client.dll", "CPlayer_ObserverServices", "m_hObserverTarget");

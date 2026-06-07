@@ -97,7 +97,7 @@ struct ClientDllOffsets_t {
 	} CPlayer_WeaponServices;
 
 	struct CCSPlayerPawn {
-		ptrdiff_t m_EconGloves = 0; // CEconItemView
+		ptrdiff_t m_EconGloves = 0; // C_EconItemView / CEconItemView
 	} CCSPlayerPawn;
 
 	struct C_EconEntity {

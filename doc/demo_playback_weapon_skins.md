@@ -31,6 +31,7 @@ mirv_demo_skin xuid x76561198000000000 gloves paintKit=10006 wear=0.08 seed=321 
 Implemented behavior:
 
 - Configuration can be issued before or during demo playback. Application only happens while demo playback is active and matching player pawns/weapons exist.
+- Multiple rules can be configured for one XUID, for example one weapon rule plus one glove rule.
 - Resolves controller XUID to pawn to active weapon.
 - `active` patches the active weapon.
 - `active` auto-locks to the currently held non-knife weapon definition when possible, so a USP-S override does not later bleed onto an R8 after the player buys/switches weapons. `defIndex=<id>` can set this manually.
@@ -56,6 +57,8 @@ Earlier prototype / research behavior not yet ported into the current branch:
 - `byXuid debug` scans for client entities whose class/debug names contain `stattrak` or `kill`, so the physical counter path can be diagnosed separately from weapon paint/material state.
 
 Known local test results from earlier skin investigation:
+
+- 2026-06-08 in-tree smoke test on `replays/match730_003824372541888135516_1872110164_388.dem`: one `weapon all` rule and one `gloves` rule were configured before `+playdemo` for `x76561198012831233`. Runtime status at demo tick `621`: `configured=2 present=1 candidates=4 patched=3 skipped=1 coreOffsets=1 gloveOffsets=1`. The skipped candidate is expected from the knife guard. This proves command parsing, XUID matching, weapon list walking, glove offset resolution, and frame-stage reapply are functioning; it does not yet prove visible material regeneration or physical StatTrak attachment.
 
 - XUID targeting works.
 - Weapon targeting works.
