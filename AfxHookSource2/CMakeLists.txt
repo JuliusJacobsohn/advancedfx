@@ -231,6 +231,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 	DemoAgent.cpp
 	DemoAgent.h
+	DemoSkin.cpp
+	DemoSkin.h
 
 	DeathMsg.cpp
 	DeathMsg.h

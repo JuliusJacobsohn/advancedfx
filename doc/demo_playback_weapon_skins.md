@@ -1,6 +1,6 @@
 # Demo Playback Weapon Skins
 
-Status: partially implemented. Econ/item/UI-name mutation works; USP-S Printstream visible material replacement works after demo time advances. Physical StatTrak counter attachment is still unresolved.
+Status: implementation restarted on `codex/demo-skin-pipeline`. The current branch has the first in-tree `mirv_demo_skin` implementation for persistent demo-time econ/item mutation. Visible material regeneration, glove material correctness, and physical StatTrak counter attachment still need runtime verification and likely deeper client refresh hooks.
 
 Goal: local/demo-only visual override for fragmovie rendering, starting with by-XUID weapon paint kits such as AWP Dragon Lore or USP-S Printstream.
 
@@ -9,10 +9,13 @@ Current command:
 ```text
 mirv_demo_skin byXuid add x<steamid64> active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id>] [meshGroup=<1|2>] [defIndex=<id>]
 mirv_demo_skin byXuid remove x<steamid64>
-mirv_demo_skin byXuid debug x<steamid64>
+mirv_demo_skin xuid <steamid64> weapon active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id|off>] [defIndex=<weaponDef>] [itemDef=<itemDef>] [meshGroup=<mask>]
+mirv_demo_skin xuid <steamid64> gloves paintKit=<id> wear=<float> seed=<id> defIndex=<gloveItemDef>
+mirv_demo_skin xuid <steamid64> clear
 mirv_demo_skin clear
 mirv_demo_skin print
 mirv_demo_skin apply
+mirv_demo_skin status
 mirv_demo_skin inspect
 ```
 
@@ -21,21 +24,25 @@ Examples:
 ```text
 mirv_demo_skin byXuid add x76561198000000000 active paintKit=344 wear=0.01 seed=0
 mirv_demo_skin byXuid add x76561198000000000 all paintKit=1142 wear=0.01 seed=0 statTrak=1337 meshGroup=1
+mirv_demo_skin xuid x76561198000000000 weapon active paintKit=1142 wear=0.01 pattern=777 statTrak=1337 defIndex=61 meshGroup=2
+mirv_demo_skin xuid x76561198000000000 gloves paintKit=10006 wear=0.08 seed=321 defIndex=5032
 ```
 
 Implemented behavior:
 
-- Applies only while demo playback is active.
+- Configuration can be issued before or during demo playback. Application only happens while demo playback is active and matching player pawns/weapons exist.
 - Resolves controller XUID to pawn to active weapon.
 - `active` patches the active weapon.
-- `active` auto-locks to the currently held weapon definition when possible, so a USP-S override does not later bleed onto an R8 after the player buys/switches weapons. `defIndex=<id>` can set this manually.
+- `active` auto-locks to the currently held non-knife weapon definition when possible, so a USP-S override does not later bleed onto an R8 after the player buys/switches weapons. `defIndex=<id>` can set this manually.
 - `all` patches `CPlayer_WeaponServices::m_hMyWeapons` plus active weapon fallback, but skips knife entities for normal weapon paint overrides. Applying a USP/AWP paint kit to a knife produced bad render state and a crash when switching weapons.
 - Reapplies during `FRAME_RENDER_PASS`.
-- Also attempts an early patch from the client entity add hook when a matching weapon entity is created. This is meant for commands that are configured before the relevant weapon is spawned, for example before the next round or after seeking before the player receives weapons.
 - Writes fallback paint kit, seed, wear, StatTrak, owner XUID, item ID high/low, account ID, quality, initialized state, and material/visual dirty flags.
 - Uses CS2's faux item-id preview shape (`0xF000000000000000 | paintKit << 16 | itemDefinitionIndex`) instead of a monotonically increasing fake id. This matches public CS2 preview-panel code and may be required by composite material generation.
-- Calls Panorama `InventoryAPI.PrecacheCustomMaterials('<fauxItemId>')` after creating the preview-style fake item ID. This is a low-risk experiment to see whether CS2 will generate the missing composite material for the same fake item ID the UI/name path already accepts.
-- Uses a vendor skin-changer refresh primitive when available: finds `RegenerateWeaponSkins` with signature `48 83 EC ?? E8 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 10`, patches its hardcoded attribute-vector offset at `+0x52`, and calls it after explicit `apply` / `add`.
+- `gloves` currently writes the pawn `CCSPlayerPawn::m_EconGloves` item view, including item definition, fake item id, owner account, and initialized state. Paint/wear/seed still need the attribute/material path to become visually reliable.
+- Current in-tree implementation does not yet call Panorama `InventoryAPI.PrecacheCustomMaterials`, the vendor `RegenerateWeaponSkins` primitive, or a fake inventory/SO-cache path. Those remain the next likely material-refresh steps.
+
+Earlier prototype / research behavior not yet ported into the current branch:
+
 - Sets `C_EconItemView::m_iItemIDHigh` to `-1` when applying skins, matching the vendor project's fallback-material path.
 - Writes direct `CEconItemAttribute` entries into `m_AttributeList` only for the material refresh path. This intentionally matches the inspected external skin changer more closely than earlier tests that also wrote `m_NetworkedDynamicAttributes`.
 - Attempts `clientside_reload_custom_econ` after explicit `apply` / `add`.
@@ -48,7 +55,7 @@ Implemented behavior:
 - `inspect` checks the external UnknownCheats skin-changer `RegenerateWeaponSkins` signature too.
 - `byXuid debug` scans for client entities whose class/debug names contain `stattrak` or `kill`, so the physical counter path can be diagnosed separately from weapon paint/material state.
 
-Known local test results:
+Known local test results from earlier skin investigation:
 
 - XUID targeting works.
 - Weapon targeting works.
@@ -69,10 +76,11 @@ Known local test results:
 - The stricter vendor lifecycle fixed the tested USP-S Printstream material: `meshGroup=2`, fake item id, fallback paint kept, and empty temporary attributes produce the correct visible skin after the demo advances.
 - After switching away and back, the demo can still stomp UI/name fallback fields while the generated material remains correct. The steady-state path now reapplies fallback/UI fields and writes `m_NetworkedDynamicAttributes` without recreating the temporary material vector in `m_AttributeList`.
 
-Fields currently used:
+Fields currently used by the in-tree implementation:
 
 - `CPlayer_WeaponServices::m_hActiveWeapon`
 - `CPlayer_WeaponServices::m_hMyWeapons`
+- `CCSPlayerPawn::m_EconGloves`
 - `C_EconEntity::m_AttributeManager`
 - `C_EconEntity::m_OriginalOwnerXuidLow`
 - `C_EconEntity::m_OriginalOwnerXuidHigh`
@@ -81,12 +89,6 @@ Fields currently used:
 - `C_EconEntity::m_flFallbackWear`
 - `C_EconEntity::m_nFallbackStatTrak`
 - `C_EconEntity::m_bAttributesInitialized`
-- `C_EconEntity::m_hViewmodelAttachment`
-- `C_EconEntity::m_bAttachmentDirty`
-- `C_CSWeaponBase::m_bClearWeaponIdentifyingUGC`
-- `C_CSWeaponBase::m_bVisualsDataSet`
-- `C_CSWeaponBase::m_nCustomEconReloadEventId`
-- `C_CSWeaponBase::m_bUIWeapon`
 - `C_AttributeContainer::m_Item`
 - `C_EconItemView::m_iItemDefinitionIndex`
 - `C_EconItemView::m_iEntityQuality`
@@ -94,19 +96,11 @@ Fields currently used:
 - `C_EconItemView::m_iItemIDHigh`
 - `C_EconItemView::m_iItemIDLow`
 - `C_EconItemView::m_iAccountID`
-- `C_EconItemView::m_bDisallowSOC`
 - `C_EconItemView::m_bInitialized`
-- `C_EconItemView::m_bRestoreCustomMaterialAfterPrecache`
-- `C_EconItemView::m_AttributeList`
-- `C_EconItemView::m_NetworkedDynamicAttributes`
-- `CAttributeList::m_Attributes`
-- `CEconItemAttribute` fields
-- `C_CSPlayerPawn::m_hHudModelArms`
-- `C_BaseEntity::m_pGameSceneNode`
 - `CSkeletonInstance::m_modelState`
 - `CModelState::m_MeshGroupMask`
 
-Attribute definition indexes currently written for the temporary material refresh vector:
+Attribute definition indexes identified for the future temporary material refresh vector:
 
 ```text
 6  -> set item texture prefab
@@ -114,7 +108,7 @@ Attribute definition indexes currently written for the temporary material refres
 8  -> set item texture wear
 ```
 
-StatTrak is still written through fallback/item fields for the UI path, but no longer as temporary material-regeneration attributes. The steady-state networked dynamic attributes write definition `80` as the numeric kill count and definition `81` as `0`; this is an experiment for the client-side StatTrak path and is separate from material generation.
+StatTrak is currently written through fallback/item fields only. Attribute definitions `80` and `81` remain candidates for a later physical StatTrak counter path, separate from material generation.
 
 Current interpretation:
 

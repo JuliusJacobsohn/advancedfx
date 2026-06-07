@@ -13,6 +13,7 @@
 #include "CamIO.h"
 #include "ViewModel.h"
 #include "DemoAgent.h"
+#include "DemoSkin.h"
 #include "Globals.h"
 #include "DeathMsg.h"
 #include "ReplaceName.h"
@@ -1513,6 +1514,7 @@ void  new_CS2_Client_FrameStageNotify(void* This, SOURCESDK::CS2::ClientFrameSta
 
 	AfxHookSource2Rs_Engine_OnClientFrameStageNotify(curStage, false);
 	DemoAgent_OnClientFrameStageNotify((int)curStage, true);
+	DemoSkin_OnClientFrameStageNotify((int)curStage, true);
 
 	AfxHookSource2Rs_Engine_RunJobQueue();
 }
@@ -2153,6 +2155,7 @@ void LibraryHooksW(HMODULE hModule, LPCWSTR lpLibFileName)
 		HookViewmodel(hModule);
 
 		HookDemoAgent(hModule);
+		HookDemoSkin(hModule);
 
 		HookDeathMsg(hModule);
 

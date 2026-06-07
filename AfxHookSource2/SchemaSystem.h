@@ -45,6 +45,7 @@ struct ClientDllOffsets_t {
 	struct CModelState {
 		ptrdiff_t m_hModel = 0; // CStrongHandle<InfoForResourceTypeCModel>
 		ptrdiff_t m_ModelName = 0; // CUtlSymbolLarge
+		ptrdiff_t m_MeshGroupMask = 0; // uint64
 	} CModelState;
 
 	struct C_BaseModelEntity {
@@ -92,7 +93,37 @@ struct ClientDllOffsets_t {
 
 	struct CPlayer_WeaponServices {
 		ptrdiff_t m_hActiveWeapon = 0; // CHandle< CBasePlayerWeapon >
+		ptrdiff_t m_hMyWeapons = 0; // C_NetworkUtlVectorBase< CHandle< C_BasePlayerWeapon > >
 	} CPlayer_WeaponServices;
+
+	struct CCSPlayerPawn {
+		ptrdiff_t m_EconGloves = 0; // CEconItemView
+	} CCSPlayerPawn;
+
+	struct C_EconEntity {
+		ptrdiff_t m_AttributeManager = 0; // C_AttributeContainer
+		ptrdiff_t m_bAttributesInitialized = 0; // bool
+		ptrdiff_t m_OriginalOwnerXuidLow = 0; // uint32
+		ptrdiff_t m_OriginalOwnerXuidHigh = 0; // uint32
+		ptrdiff_t m_nFallbackPaintKit = 0; // int32
+		ptrdiff_t m_nFallbackSeed = 0; // int32
+		ptrdiff_t m_flFallbackWear = 0; // float32
+		ptrdiff_t m_nFallbackStatTrak = 0; // int32
+	} C_EconEntity;
+
+	struct C_AttributeContainer {
+		ptrdiff_t m_Item = 0; // C_EconItemView
+	} C_AttributeContainer;
+
+	struct C_EconItemView {
+		ptrdiff_t m_iItemDefinitionIndex = 0; // uint16
+		ptrdiff_t m_iEntityQuality = 0; // int32
+		ptrdiff_t m_iItemID = 0; // uint64
+		ptrdiff_t m_iItemIDHigh = 0; // uint32
+		ptrdiff_t m_iItemIDLow = 0; // uint32
+		ptrdiff_t m_iAccountID = 0; // uint32
+		ptrdiff_t m_bInitialized = 0; // bool
+	} C_EconItemView;
 
 	struct CPlayer_ObserverServices {
 		ptrdiff_t m_iObserverMode = 0; // uint8                                   
