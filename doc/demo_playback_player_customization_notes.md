@@ -21,22 +21,30 @@ Current implementation status:
 | Player color | Done | `mirv_player_color` writes `CCSPlayerController::m_iCompTeammateColor`; verified for HUD/chat color in the Inferno test demo and good enough for local fragmovie/demo-render use. |
 | Avatars | Done | `mirv_avatar` replaces demo player avatars with avatars resolved from another SteamID64; verified for top bar, scoreboard, and bottom spectator bar without overlay panels. |
 | Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
-| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply model overrides by SteamID64/XUID. It repairs configured pawns after client frame-stage updates when their current model state does not match the configured override. |
+| Agent models | Done | `mirv_demo_agent` applies per-XUID demo player model overrides using CS2 agent internal names, item definition IDs, or direct model paths. It repairs configured pawns after client frame-stage updates when their current model state does not match the configured override. |
 
 Agent model prototype notes:
 
 - Agent values can be direct `agents/models/...vmdl` paths, numeric item definition IDs, or internal `customplayer_*` names. Full list: [cs2_agent_models.md](cs2_agent_models.md).
-- Stable command sequence for a specific player: `mirv_demo_agent inspect`, `mirv_demo_agent xuid <steamid64> set customplayer_tm_jungle_raider_variante`, `mirv_demo_agent inspect`.
+- Stable command sequence for a specific player: `mirv_demo_agent xuid <steamid64> set customplayer_tm_jungle_raider_variante`, `playdemo <demo>`, `mirv_demo_agent status`.
+- `xuid` overrides can be configured before the demo is loaded. They are stored immediately and applied when a matching `C_CSPlayerPawn` exists and is safe to modify.
 - Manual test helper: `mirv_demo_agent slot <1-10> set customplayer_tm_jungle_raider_variante`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
 - Use `mirv_demo_agent apply` to re-apply all currently configured XUID overrides once.
 - Configured XUID overrides use a repair-only path. The command resolves the client `CBaseModelEntity_SetModel` candidate so it can ask CS2 to apply a model, but it does not detour that function.
 - After client frame-stage updates, the prototype scans configured `C_CSPlayerPawn` entries, maps pawn -> controller -> XUID, and compares current `CModelState` handle/name symbol with the remembered target. If the model is missing or mismatched, it calls `SetModel(pawn, configuredModel)` and records the resulting target state.
 - This is a repair at the client frame-stage boundary, not yet the ideal low-level packet/entity-field replacement. It should survive spawn, skip, rewind, and full-update restores with one shared code path. The tradeoff is that a freshly restored original model may exist for one frame before the repair pass runs.
+- `mirv_demo_agent status` counters:
+  - `configured`: XUID override rules currently stored.
+  - `remembered`: overrides that have applied at least once and have a remembered target `CModelState` handle/name symbol.
+  - `present`: configured XUIDs that currently have a live `C_CSPlayerPawn`.
+  - `unsafe`: present configured pawns skipped because spawn/staging/delete/construction identity flags are set.
+  - `mismatched`: present and safe configured pawns whose current model state does not match the remembered override target.
 - Seek safety detail: an early repair immediately after demo skip produced `CModelState::SetupModel` assertions while the pawn identity still had `EF_IN_STAGING_LIST`. The repair path now reads `CEntityIdentity::m_flags` and skips automatic repair while spawn/staging/delete/construction bits are present. `mirv_demo_agent inspect` prints identity flags for this reason.
 - 2026-06-07 verification on `replays/match730_003816038387630997543_1135542072_274.dem`: inspect listed 10 `C_CSPlayerPawn` entries; single apply changed all 10 to one shared model handle/name symbol and exited cleanly through scheduled `quit`.
 - 2026-06-07 seek verification on the same demo: ten different configured agent models survived multiple skips. Console showed repairs after forward seeks to demo ticks `9807` and `14903`, and after a backward seek to demo tick `29`. After adding the entity staging guard, the previous `CModelState::SetupModel` assertion did not reappear in the filtered log.
 - 2026-06-07 newer-demo verification on `replays/match730_003824372541888135516_1872110164_388.dem`: internal `customplayer_*` names resolved to model paths and applied to all 10 player slots. Final status at demo tick `31`: `configured=10 remembered=10 present=10 unsafe=0 mismatched=0`. A separate scheduled seek run on the same demo repaired all 10 overrides after a jump to demo tick `10000`; the schedule was too compressed for useful visual inspection, so the follow-up launch intentionally left the demo running.
 - 2026-06-07 repair-only smoke test on `replays/match730_003824372541888135516_1872110164_388.dem`: after removing the `SetModel` detour, scheduled slot commands applied ten different internal agent names. Final status at demo tick `721`: `configured=10 remembered=10 present=10 unsafe=0 mismatched=0`.
+- 2026-06-08 startup-XUID verification on `replays/match730_003824372541888135516_1872110164_388.dem`: ten `mirv_demo_agent xuid ... set ...` commands were issued before `+playdemo`. The repair loop applied all ten once matching pawns existed. Final status at demo tick `561`: `configured=10 remembered=10 present=10 unsafe=0 mismatched=0`.
 - Avoid applying to `C_CSObserverPawn` entries. Automatic repair is currently limited to configured `C_CSPlayerPawn` entries during active demo playback.
 - Current limitation: overrides are stored in process memory only; they are not saved to disk or embedded into demo files.
 
