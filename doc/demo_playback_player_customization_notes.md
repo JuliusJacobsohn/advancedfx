@@ -21,14 +21,18 @@ Current implementation status:
 | Player color | Done | `mirv_player_color` writes `CCSPlayerController::m_iCompTeammateColor`; verified for HUD/chat color in the Inferno test demo and good enough for local fragmovie/demo-render use. |
 | Avatars | Done | `mirv_avatar` replaces demo player avatars with avatars resolved from another SteamID64; verified for top bar, scoreboard, and bottom spectator bar without overlay panels. |
 | Weapon skins | Prototype/investigation | Partial skin path found, but Stattrak/counter and robustness issues remain. |
-| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply a Vypa model override once to all real `C_CSPlayerPawn` entities. Repeat-per-frame application is disabled after crash reports. |
+| Agent models | Prototype/investigation | `mirv_demo_agent` can inspect demo player pawn model state and apply model overrides by SteamID64/XUID. Repeat-per-frame application is disabled after crash reports. |
 
 Agent model prototype notes:
 
 - Built-in alias: `vypa -> agents/models/tm_jungle_raider/tm_jungle_raider_variante.vmdl`, from item def `4777` / `customplayer_tm_jungle_raider_variante`.
-- Stable command sequence for the test demo: `mirv_demo_agent inspect`, `mirv_demo_agent all set vypa`, `mirv_demo_agent apply`, `mirv_demo_agent inspect`.
+- Stable command sequence for a specific player: `mirv_demo_agent inspect`, `mirv_demo_agent xuid <steamid64> set vypa`, `mirv_demo_agent inspect`.
+- Manual test helper: `mirv_demo_agent slot <1-10> set vypa`. Slots are resolved from current pawn enumeration and immediately stored as XUID-specific overrides; they are not stable identifiers.
+- Use `mirv_demo_agent apply` to re-apply all currently configured XUID overrides once.
+- Persistence is enabled by default. `mirv_demo_agent persist 0|1` toggles automatic re-apply for configured XUID overrides when matching pawns reappear or their model state resets after seeking/rewinding.
 - 2026-06-07 verification on `replays/match730_003816038387630997543_1135542072_274.dem`: inspect listed 10 `C_CSPlayerPawn` entries; single apply changed all 10 to one shared model handle/name symbol and exited cleanly through scheduled `quit`.
 - Avoid applying to `C_CSObserverPawn` entries and avoid automatic frame-by-frame `SetModel` calls while this remains experimental.
+- Current limitation: overrides are stored in process memory only; they are not saved to disk or embedded into demo files.
 
 Shared implementation constraints:
 
