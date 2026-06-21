@@ -1,10 +1,42 @@
-/build
-/ipch
-/.vs
-/.vscode
+# Build outputs
+/build/
+/build-*/
+/out/
+/target/
+
+# CMake local state
+/CMakeCache.txt
+/CMakeFiles/
+/CMakeScripts/
+/Testing/
+/cmake_install.cmake
+/install_manifest.txt
+/CMakeUserPresets.json
+
+# Visual Studio / MSBuild local state
+/.vs/
+/ipch/
 /*.VC.*
-/packages
-/out
-/.idea
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Package and tool caches
+/packages/
+node_modules/
+__pycache__/
+.pytest_cache/
+.venv/
+
+# IDE local state
+/.vscode/
+/.idea/
+
+# Local scratch and research folders
 /VendorTestRepos/
 /research/
+
+# OS-generated files
+Thumbs.db
+Desktop.ini

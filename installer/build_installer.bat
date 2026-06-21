@@ -10,8 +10,11 @@ cd "%~dp0"
 @echo ==================================================
 @echo Installing WiX Toolset v5.0.2 ...
 @echo ==================================================
-dotnet tool install --global wix --version 5.0.2
-@IF !errorlevel! NEQ 0 EXIT /B 1
+dotnet tool update --global wix --version 5.0.2
+@IF !errorlevel! NEQ 0 (
+    dotnet tool install --global wix --version 5.0.2
+    @IF !errorlevel! NEQ 0 EXIT /B 1
+)
 
 @echo ==================================================
 @echo Installing WiX Toolset v5.0.2 dependencies ...
