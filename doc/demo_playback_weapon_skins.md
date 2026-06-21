@@ -9,7 +9,7 @@ Current command:
 ```text
 mirv_demo_skin byXuid add x<steamid64> active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id>] [meshGroup=<1|2>] [defIndex=<id>]
 mirv_demo_skin byXuid remove x<steamid64>
-mirv_demo_skin xuid <steamid64> weapon active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id|off>|killCount=<id>|kills=<id>] [defIndex=<weaponDef>] [itemDef=<itemDef>] [meshGroup=<mask>] [team=T|CT|any]
+mirv_demo_skin xuid <steamid64> weapon paintKit=<id> wear=<float> seed=<id> defIndex=<weaponDef> [statTrak=<id|off>|killCount=<id>|kills=<id>] [meshGroup=<mask>] [team=T|CT|any]
 mirv_demo_skin xuid <steamid64> gloves paintKit=<id> wear=<float> seed=<id> defIndex=<gloveItemDef> [team=T|CT|any]
 mirv_demo_skin xuid <steamid64> clear
 mirv_demo_skin clear
@@ -25,7 +25,7 @@ Examples:
 mirv_demo_skin byXuid add x76561198000000000 active paintKit=344 wear=0.01 seed=0
 mirv_demo_skin byXuid add x76561198000000000 all paintKit=1142 wear=0.01 seed=0 statTrak=1337 meshGroup=1
 mirv_demo_skin xuid x76561198000000000 weapon active paintKit=1142 wear=0.01 pattern=777 statTrak=1337 defIndex=61 meshGroup=2
-mirv_demo_skin xuid x76561198000000000 weapon all paintKit=38 wear=0.0001 seed=0 killCount=1234 defIndex=4 team=T meshGroup=2
+mirv_demo_skin xuid x76561198000000000 weapon paintKit=38 wear=0.0001 seed=0 killCount=1234 defIndex=4 team=T meshGroup=2
 mirv_demo_skin xuid x76561198000000000 gloves paintKit=10006 wear=0.08 seed=321 defIndex=5032
 ```
 
@@ -34,10 +34,11 @@ Implemented behavior:
 - Configuration can be issued before or during demo playback. Application only happens while demo playback is active and matching player pawns/weapons exist.
 - Multiple rules can be configured for one XUID, for example one weapon rule plus one glove rule.
 - Resolves controller XUID to pawn to active weapon.
-- `active` patches the active weapon.
-- `active` auto-locks to the currently held non-knife weapon definition when possible, so a USP-S override does not later bleed onto an R8 after the player buys/switches weapons. `defIndex=<id>` can set this manually.
-- For match-wide normal weapon overrides, prefer `weapon all ... defIndex=<weaponDef> [team=T|CT|any]`. This stores one XUID-side-weapon rule and reapplies it every frame to any matching weapon entity the player currently owns. For example, a T-side Glock rule applies every time that player has a Glock on T side, including after round changes, demo skips, and new weapon entity creation.
-- `all` patches `CPlayer_WeaponServices::m_hMyWeapons` plus active weapon fallback, but skips knife entities for normal weapon paint overrides unless an explicit experimental `itemDef=` replacement is supplied. Applying a normal weapon paint kit to a knife produced bad render state and a crash when switching weapons.
+- Normal weapon overrides default to the persistent all-weapons scan. A rule such as `weapon paintKit=38 defIndex=4 team=T` stores one XUID-side-weapon-definition rule and applies it to matching weapon entities whenever they appear.
+- The old `active|all` target argument is still accepted for compatibility, but it is not the intended normal weapon command shape anymore.
+- Weapon entities keep their first matching rule assignment. If Donald's T-side Glock rule skins a Glock and Benjamin later picks that entity up, the entity continues to use Donald's Glock rule instead of being reassigned to Benjamin's Glock rule. A new Glock entity spawned for Benjamin can still receive Benjamin's own Glock rule.
+- `active` is legacy behavior for quick testing. It only considers the active weapon.
+- The persistent scan checks `CPlayer_WeaponServices::m_hMyWeapons` plus active weapon fallback, but skips knife entities for normal weapon paint overrides unless an explicit experimental `itemDef=` replacement is supplied. Applying a normal weapon paint kit to a knife produced bad render state and a crash when switching weapons.
 - Reapplies during `FRAME_RENDER_PASS`.
 - Writes fallback paint kit, seed, wear, StatTrak, owner XUID, item ID high/low, account ID, quality, initialized state, and material/visual dirty flags.
 - Uses CS2's faux item-id preview shape (`0xF000000000000000 | paintKit << 16 | itemDefinitionIndex`) instead of a monotonically increasing fake id. This matches public CS2 preview-panel code and may be required by composite material generation.

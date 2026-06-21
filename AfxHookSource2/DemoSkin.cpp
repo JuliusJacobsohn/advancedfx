@@ -56,7 +56,14 @@ struct ApplyStats {
 	int skipped = 0;
 };
 
+struct WeaponAssignment {
+	uint64_t xuid = 0;
+	int team = 0;
+	int weaponDefIndex = 0;
+};
+
 std::unordered_map<uint64_t, std::vector<SkinRule>> g_SkinRules;
+std::unordered_map<uint32_t, WeaponAssignment> g_WeaponAssignments;
 std::unordered_set<uint64_t> g_RefreshRequestedItemIds;
 bool g_WarnedMissingOffsets = false;
 
@@ -358,6 +365,48 @@ int getItemDefinitionIndex(unsigned char* itemView)
 	return *(uint16_t*)(itemView + g_clientDllOffsets.C_EconItemView.m_iItemDefinitionIndex);
 }
 
+uint32_t getWeaponKey(CEntityInstance* weapon)
+{
+	if (!weapon) return 0;
+	auto handle = weapon->GetHandle();
+	return handle.IsValid() ? (uint32_t)handle.ToInt() : 0;
+}
+
+bool isActiveWeapon(const PlayerPawnInfo& player, CEntityInstance* weapon)
+{
+	if (!player.pawn || !weapon) return false;
+	const auto active = player.pawn->GetActiveWeaponHandle();
+	return active.IsValid() && active == weapon->GetHandle();
+}
+
+SkinRule* findWeaponRule(uint64_t xuid, int team, int weaponDefIndex, bool isActive)
+{
+	auto rulesIt = g_SkinRules.find(xuid);
+	if (rulesIt == g_SkinRules.end()) return nullptr;
+
+	SkinRule* best = nullptr;
+	int bestScore = -1;
+
+	for (auto& rule : rulesIt->second) {
+		if (rule.target == SkinTarget::Gloves) continue;
+		if (rule.target == SkinTarget::ActiveWeapon && !isActive) continue;
+		if (0 != rule.team && rule.team != team) continue;
+		if (0 < rule.weaponDefIndex && rule.weaponDefIndex != weaponDefIndex) continue;
+
+		const int score =
+			(0 != rule.team ? 100 : 0) +
+			(0 < rule.weaponDefIndex ? 10 : 0) +
+			(rule.target == SkinTarget::AllWeapons ? 1 : 0);
+
+		if (bestScore < score) {
+			best = &rule;
+			bestScore = score;
+		}
+	}
+
+	return best;
+}
+
 uint64_t makePreviewItemId(int paintKit, int itemDef)
 {
 	return 0xF000000000000000ULL | (((uint64_t)(uint32_t)paintKit) << 16) | (uint16_t)itemDef;
@@ -478,11 +527,61 @@ bool patchGloves(CEntityInstance* pawn, const SkinRule& rule, uint64_t ownerXuid
 	return true;
 }
 
+bool applyWeaponToPlayer(const PlayerPawnInfo& player, CEntityInstance* weapon, bool print, ApplyStats* stats)
+{
+	if (!weapon) return false;
+	if (stats) ++stats->candidates;
+
+	auto itemView = getItemViewFromEconEntity(weapon);
+	const int currentDef = getItemDefinitionIndex(itemView);
+	if (currentDef <= 0) {
+		if (stats) ++stats->skipped;
+		return false;
+	}
+
+	const uint32_t weaponKey = getWeaponKey(weapon);
+	if (0 == weaponKey) {
+		if (stats) ++stats->skipped;
+		return false;
+	}
+
+	const int holderTeam = getPawnTeam(player.pawn);
+	const bool active = isActiveWeapon(player, weapon);
+	SkinRule* rule = nullptr;
+	uint64_t ruleOwnerXuid = player.xuid;
+
+	auto assignmentIt = g_WeaponAssignments.find(weaponKey);
+	if (assignmentIt != g_WeaponAssignments.end()) {
+		const auto assignment = assignmentIt->second;
+		rule = findWeaponRule(assignment.xuid, assignment.team, currentDef, active);
+		if (rule) {
+			ruleOwnerXuid = assignment.xuid;
+		} else {
+			g_WeaponAssignments.erase(assignmentIt);
+		}
+	}
+
+	if (!rule) {
+		rule = findWeaponRule(player.xuid, holderTeam, currentDef, active);
+		if (rule) {
+			ruleOwnerXuid = player.xuid;
+			g_WeaponAssignments[weaponKey] = { player.xuid, rule->team, currentDef };
+		}
+	}
+
+	if (!rule) {
+		if (stats) ++stats->skipped;
+		return false;
+	}
+
+	const bool patched = patchWeapon(weapon, *rule, ruleOwnerXuid, print);
+	if (stats) patched ? ++stats->patched : ++stats->skipped;
+	return patched;
+}
+
 bool applyRuleToPlayer(const PlayerPawnInfo& player, SkinRule& rule, bool print, ApplyStats* stats)
 {
 	if (!ruleMatchesPlayer(rule, player)) return false;
-
-	bool any = false;
 
 	if (rule.target == SkinTarget::Gloves) {
 		if (stats) ++stats->candidates;
@@ -491,21 +590,7 @@ bool applyRuleToPlayer(const PlayerPawnInfo& player, SkinRule& rule, bool print,
 		return patched;
 	}
 
-	std::vector<CEntityInstance*> weapons;
-	if (rule.target == SkinTarget::ActiveWeapon) {
-		if (auto active = getEntityFromHandle(player.pawn->GetActiveWeaponHandle())) weapons.push_back(active);
-	} else {
-		weapons = getAllWeapons(player.pawn);
-	}
-
-	for (auto weapon : weapons) {
-		if (stats) ++stats->candidates;
-		const bool patched = patchWeapon(weapon, rule, player.xuid, print);
-		if (stats) patched ? ++stats->patched : ++stats->skipped;
-		any = any || patched;
-	}
-
-	return any;
+	return false;
 }
 
 ApplyStats applyConfiguredRules(bool print)
@@ -516,6 +601,7 @@ ApplyStats applyConfiguredRules(bool print)
 	}
 
 	if (!isPlayingDemo() || !g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
+		g_WeaponAssignments.clear();
 		return stats;
 	}
 	if (!ensureSkinOffsets(false)) return stats;
@@ -528,7 +614,13 @@ ApplyStats applyConfiguredRules(bool print)
 		++stats.present;
 		for (auto& rule : it->second) {
 			if (ruleMatchesPlayer(rule, player)) ++stats.applicable;
-			applyRuleToPlayer(player, rule, print, &stats);
+			if (rule.target == SkinTarget::Gloves) {
+				applyRuleToPlayer(player, rule, print, &stats);
+			}
+		}
+
+		for (auto weapon : getAllWeapons(player.pawn)) {
+			applyWeaponToPlayer(player, weapon, print, &stats);
 		}
 	}
 
@@ -618,6 +710,7 @@ void setRule(uint64_t xuid, const SkinRule& rule)
 		rules.end()
 	);
 	rules.push_back(rule);
+	g_WeaponAssignments.clear();
 	g_RefreshRequestedItemIds.clear();
 
 	advancedfx::Message(
@@ -645,12 +738,13 @@ void printStatus()
 {
 	const ApplyStats stats = applyConfiguredRules(false);
 	advancedfx::Message(
-		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i applicable=%i candidates=%i patched=%i skipped=%i refreshed=%llu coreOffsets=%i gloveOffsets=%i\n",
+		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i applicable=%i assigned=%llu candidates=%i patched=%i skipped=%i refreshed=%llu coreOffsets=%i gloveOffsets=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		stats.configured,
 		stats.present,
 		stats.applicable,
+		(unsigned long long)g_WeaponAssignments.size(),
 		stats.candidates,
 		stats.patched,
 		stats.skipped,
@@ -692,10 +786,11 @@ void inspect()
 	}
 
 	advancedfx::Message(
-		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu coreOffsets=%i gloveOffsets=%i myWeapons=%i meshGroup=%i\n",
+		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu assigned=%llu coreOffsets=%i gloveOffsets=%i myWeapons=%i meshGroup=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		(unsigned long long)configuredRules,
+		(unsigned long long)g_WeaponAssignments.size(),
 		hasCoreWeaponOffsets() ? 1 : 0,
 		hasGloveOffsets() ? 1 : 0,
 		0 != g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons ? 1 : 0,
@@ -728,7 +823,8 @@ void inspect()
 void printHelp(const char* arg0)
 {
 	advancedfx::Message(
-		"%s xuid <steamid64> weapon active|all paintKit=<id> wear=<0..1> seed=<id> [statTrak=<id|off>|killCount=<id>|kills=<id>] [defIndex=<weaponDef>] [itemDef=<itemDef>] [meshGroup=<mask>] [team=T|CT|any] - Configure weapon skin override.\n"
+		"%s xuid <steamid64> weapon paintKit=<id> wear=<0..1> seed=<id> defIndex=<weaponDef> [statTrak=<id|off>|killCount=<id>|kills=<id>] [meshGroup=<mask>] [team=T|CT|any] - Configure persistent normal weapon skin override.\n"
+		"%s xuid <steamid64> weapon active|all ... - Backward-compatible targeting syntax; normal weapon rules default to the persistent all-weapons scan.\n"
 		"%s xuid <steamid64> gloves paintKit=<id> wear=<0..1> seed=<id> defIndex=<gloveItemDef> [team=T|CT|any] - Configure glove item view override.\n"
 		"%s xuid <steamid64> clear - Clear one player's skin override.\n"
 		"%s byXuid add x<steamid64> active|all paintKit=<id> wear=<0..1> seed=<id> [statTrak=<id|off>|killCount=<id>|kills=<id>] [defIndex=<weaponDef>] [meshGroup=<mask>] [team=T|CT|any] - Backward-compatible weapon syntax.\n"
@@ -739,7 +835,7 @@ void printHelp(const char* arg0)
 		"%s status - Print concise skin override status.\n"
 		"%s print - Print configured rules.\n"
 		"%s inspect - Print player and active weapon diagnostics.\n",
-		arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0
+		arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0, arg0
 	);
 }
 
@@ -812,6 +908,7 @@ CON_COMMAND(mirv_demo_skin, "Prototype CS2 demo playback weapon / glove skin ove
 		}
 		if (0 == _stricmp(arg1, "clear")) {
 			g_SkinRules.clear();
+			g_WeaponAssignments.clear();
 			g_RefreshRequestedItemIds.clear();
 			advancedfx::Message("mirv_demo_skin: cleared all configured skin overrides.\n");
 			return;
@@ -826,19 +923,28 @@ CON_COMMAND(mirv_demo_skin, "Prototype CS2 demo playback weapon / glove skin ove
 
 			if (0 == _stricmp(args->ArgV(3), "clear")) {
 				const auto erased = g_SkinRules.erase(xuid);
+				g_WeaponAssignments.clear();
 				g_RefreshRequestedItemIds.clear();
 				advancedfx::Message("mirv_demo_skin: %s override for xuid=x%llu.\n", erased ? "cleared" : "had no", (unsigned long long)xuid);
 				return;
 			}
 
 			if (0 == _stricmp(args->ArgV(3), "weapon")) {
-				SkinTarget target = SkinTarget::ActiveWeapon;
-				if (argc < 5 || !parseTarget(args->ArgV(4), target) || target == SkinTarget::Gloves) {
-					advancedfx::Warning("mirv_demo_skin: expected xuid <steamid64> weapon active|all ...\n");
+				SkinTarget target = SkinTarget::AllWeapons;
+				int firstRuleArg = 4;
+				if (argc >= 5 && parseTarget(args->ArgV(4), target)) {
+					if (target == SkinTarget::Gloves) {
+						advancedfx::Warning("mirv_demo_skin: expected xuid <steamid64> weapon [active|all] ...\n");
+						return;
+					}
+					firstRuleArg = 5;
+				}
+				if (argc <= firstRuleArg) {
+					advancedfx::Warning("mirv_demo_skin: expected xuid <steamid64> weapon [active|all] paintKit=<id> ...\n");
 					return;
 				}
 				SkinRule rule;
-				if (!parseSkinRule(5, argc, args, target, rule)) {
+				if (!parseSkinRule(firstRuleArg, argc, args, target, rule)) {
 					advancedfx::Warning("mirv_demo_skin: invalid weapon skin arguments.\n");
 					return;
 				}
@@ -873,6 +979,7 @@ CON_COMMAND(mirv_demo_skin, "Prototype CS2 demo playback weapon / glove skin ove
 					return;
 				}
 				const auto erased = g_SkinRules.erase(xuid);
+				g_WeaponAssignments.clear();
 				g_RefreshRequestedItemIds.clear();
 				advancedfx::Message("mirv_demo_skin: %s override for xuid=x%llu.\n", erased ? "cleared" : "had no", (unsigned long long)xuid);
 				return;
