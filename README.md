@@ -53,8 +53,9 @@ This branch includes CS2 demo playback player customization work:
 * Synthetic demo chat insertion.
 * Demo teammate color overrides through `mirv_player_color`.
 * Demo agent model replacement through `mirv_demo_agent`.
-  * Configure stable per-player overrides with `mirv_demo_agent xuid <steamid64> set <agentInternalName|itemDef|modelPath>`.
-  * Use `mirv_demo_agent slot <1-10> set <agentInternalName|itemDef|modelPath>` only as a temporary testing helper after a demo has loaded.
+  * Configure stable per-player overrides with `mirv_demo_agent xuid <steamid64> set <agentInternalName|itemDef|modelPath> [team=T|CT|any]`.
+  * Use one `team=T` and one `team=CT` rule when the same player should use different T / CT agents.
+  * Use `mirv_demo_agent slot <1-10> set <agentInternalName|itemDef|modelPath> [team=T|CT|any]` only as a temporary testing helper after a demo has loaded.
   * List supported CS2 agent internal names and item definition IDs with `mirv_demo_agent agents`; the generated reference table is in [doc/cs2_agent_models.md](doc/cs2_agent_models.md).
 
 See [doc/demo_playback_player_customization_notes.md](doc/demo_playback_player_customization_notes.md) and [doc/demo_playback_player_color.md](doc/demo_playback_player_color.md) for current status, test notes, and remaining follow-up work.

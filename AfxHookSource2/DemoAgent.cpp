@@ -38,7 +38,7 @@ const AgentModelDefinition kAgentModels[] = {
 };
 
 CBaseModelEntity_SetModel_t g_SetModel = nullptr;
-std::unordered_map<uint64_t, std::string> g_PlayerModelOverrides;
+std::unordered_map<uint64_t, std::unordered_map<int, std::string>> g_PlayerModelOverrides;
 
 struct AppliedModelState {
 	std::string modelName;
@@ -53,7 +53,7 @@ struct RepairStats {
 	int unchanged = 0;
 };
 
-std::unordered_map<uint64_t, AppliedModelState> g_AppliedModelStates;
+std::unordered_map<uint64_t, std::unordered_map<int, AppliedModelState>> g_AppliedModelStates;
 int g_LastRepairLogTick = -1;
 int g_SuppressedRepairLogs = 0;
 
@@ -159,6 +159,53 @@ bool parseSlot(const char* arg, int& outSlot)
 	return true;
 }
 
+bool parseTeam(const char* arg, int& outTeam)
+{
+	if (!arg || !arg[0]) return false;
+	if (0 == _stricmp(arg, "any") || 0 == _stricmp(arg, "all")) {
+		outTeam = 0;
+		return true;
+	}
+	if (0 == _stricmp(arg, "t") || 0 == _stricmp(arg, "terrorist") || 0 == _stricmp(arg, "terrorists")) {
+		outTeam = 2;
+		return true;
+	}
+	if (0 == _stricmp(arg, "ct") || 0 == _stricmp(arg, "counterterrorist") || 0 == _stricmp(arg, "counterterrorists")) {
+		outTeam = 3;
+		return true;
+	}
+	return false;
+}
+
+bool parseTeamOption(const char* arg, int& outTeam)
+{
+	if (!arg || !arg[0]) return false;
+	const char* value = nullptr;
+	if (0 == _strnicmp(arg, "team=", 5)) value = arg + 5;
+	else if (0 == _strnicmp(arg, "side=", 5)) value = arg + 5;
+	else value = arg;
+
+	return parseTeam(value, outTeam);
+}
+
+const char* teamName(int team)
+{
+	switch (team) {
+	case 2: return "T";
+	case 3: return "CT";
+	default: return "any";
+	}
+}
+
+template<typename TArgs>
+bool parseOptionalTeamArgs(TArgs* args, int startIndex, int argc, int& team)
+{
+	for (int i = startIndex; i < argc; ++i) {
+		if (!parseTeamOption(args->ArgV(i), team)) return false;
+	}
+	return true;
+}
+
 bool isDemoPlayerPawn(CEntityInstance* entity)
 {
 	if (!entity || !entity->IsPlayerPawn()) return false;
@@ -193,6 +240,12 @@ uint64_t getControllerXuid(CEntityInstance* controller)
 {
 	if (!controller) return 0;
 	return *(uint64_t*)((unsigned char*)controller + g_clientDllOffsets.CBasePlayerController.m_steamID);
+}
+
+int getPawnTeam(CEntityInstance* pawn)
+{
+	if (!pawn) return 0;
+	return *(uint8_t*)((unsigned char*)pawn + g_clientDllOffsets.C_BaseEntity.m_iTeamNum);
 }
 
 unsigned char* getModelState(CEntityInstance* entity)
@@ -319,21 +372,62 @@ bool ensureCanApply(bool print)
 	return true;
 }
 
-bool applyPlayerModel(const PlayerPawnInfo& info, const char* modelName, bool print)
+int countConfiguredOverrides()
+{
+	int count = 0;
+	for (const auto& entry : g_PlayerModelOverrides) {
+		count += (int)entry.second.size();
+	}
+	return count;
+}
+
+int countRememberedStates()
+{
+	int count = 0;
+	for (const auto& entry : g_AppliedModelStates) {
+		count += (int)entry.second.size();
+	}
+	return count;
+}
+
+const std::string* getConfiguredModel(const PlayerPawnInfo& info, int* outTeam)
+{
+	const auto xuidIt = g_PlayerModelOverrides.find(info.xuid);
+	if (g_PlayerModelOverrides.end() == xuidIt) return nullptr;
+
+	const int playerTeam = getPawnTeam(info.pawn);
+	const auto exactIt = xuidIt->second.find(playerTeam);
+	if (xuidIt->second.end() != exactIt) {
+		if (outTeam) *outTeam = playerTeam;
+		return &exactIt->second;
+	}
+
+	const auto anyIt = xuidIt->second.find(0);
+	if (xuidIt->second.end() != anyIt) {
+		if (outTeam) *outTeam = 0;
+		return &anyIt->second;
+	}
+
+	return nullptr;
+}
+
+bool applyPlayerModel(const PlayerPawnInfo& info, int overrideTeam, const char* modelName, bool print)
 {
 	if (!modelName || !modelName[0] || !info.pawn || !g_SetModel) return false;
 
 	g_SetModel(info.pawn, modelName);
 
-	auto& state = g_AppliedModelStates[info.xuid];
+	auto& state = g_AppliedModelStates[info.xuid][overrideTeam];
 	state.modelName = modelName;
 	state.modelHandle = getModelHandle(info.pawn);
 	state.modelNameSymbol = getModelNameSymbol(info.pawn);
 
 	if (print) {
 		advancedfx::Message(
-			"mirv_demo_agent: applied slotEntry=%i xuid=%s%llu name=%s model=%s modelHandle=0x%p modelNameSymbol=0x%08x\n",
+			"mirv_demo_agent: applied slotEntry=%i team=%s overrideTeam=%s xuid=%s%llu name=%s model=%s modelHandle=0x%p modelNameSymbol=0x%08x\n",
 			info.entry,
+			teamName(getPawnTeam(info.pawn)),
+			teamName(overrideTeam),
 			looksLikeSteamId(info.xuid) ? "x" : "",
 			(unsigned long long)info.xuid,
 			getControllerName(info.controller),
@@ -346,10 +440,12 @@ bool applyPlayerModel(const PlayerPawnInfo& info, const char* modelName, bool pr
 	return true;
 }
 
-bool shouldRepairPlayerModel(const PlayerPawnInfo& info, const std::string& modelName)
+bool shouldRepairPlayerModel(const PlayerPawnInfo& info, int overrideTeam, const std::string& modelName)
 {
-	auto stateIt = g_AppliedModelStates.find(info.xuid);
-	if (g_AppliedModelStates.end() == stateIt) return true;
+	const auto xuidStateIt = g_AppliedModelStates.find(info.xuid);
+	if (g_AppliedModelStates.end() == xuidStateIt) return true;
+	const auto stateIt = xuidStateIt->second.find(overrideTeam);
+	if (xuidStateIt->second.end() == stateIt) return true;
 
 	const auto& state = stateIt->second;
 	if (state.modelName != modelName) return true;
@@ -368,19 +464,20 @@ RepairStats repairConfiguredOverrides()
 
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
-		auto it = g_PlayerModelOverrides.find(player.xuid);
-		if (g_PlayerModelOverrides.end() == it) continue;
+		int overrideTeam = 0;
+		const auto model = getConfiguredModel(player, &overrideTeam);
+		if (!model) continue;
 
 		++stats.candidates;
 		if (!canSafelyAutoRepair(player.pawn)) {
 			++stats.unsafe;
 			continue;
 		}
-		if (!shouldRepairPlayerModel(player, it->second)) {
+		if (!shouldRepairPlayerModel(player, overrideTeam, *model)) {
 			++stats.unchanged;
 			continue;
 		}
-		if (applyPlayerModel(player, it->second.c_str(), false)) {
+		if (applyPlayerModel(player, overrideTeam, model->c_str(), false)) {
 			++stats.repaired;
 		}
 	}
@@ -395,10 +492,11 @@ int applyConfiguredOverrides(bool print)
 	int applied = 0;
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
-		auto it = g_PlayerModelOverrides.find(player.xuid);
-		if (g_PlayerModelOverrides.end() == it) continue;
+		int overrideTeam = 0;
+		const auto model = getConfiguredModel(player, &overrideTeam);
+		if (!model) continue;
 
-		if (applyPlayerModel(player, it->second.c_str(), print)) {
+		if (applyPlayerModel(player, overrideTeam, model->c_str(), print)) {
 			++applied;
 		}
 	}
@@ -410,8 +508,8 @@ bool applySingleXuid(uint64_t xuid, bool print)
 {
 	if (!ensureCanApply(print)) return false;
 
-	const auto modelIt = g_PlayerModelOverrides.find(xuid);
-	if (g_PlayerModelOverrides.end() == modelIt) {
+	const auto overrideIt = g_PlayerModelOverrides.find(xuid);
+	if (g_PlayerModelOverrides.end() == overrideIt || overrideIt->second.empty()) {
 		if (print) advancedfx::Warning("mirv_demo_agent: no model configured for xuid=%llu.\n", (unsigned long long)xuid);
 		return false;
 	}
@@ -419,26 +517,37 @@ bool applySingleXuid(uint64_t xuid, bool print)
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
 		if (player.xuid != xuid) continue;
-		return applyPlayerModel(player, modelIt->second.c_str(), print);
+		int overrideTeam = 0;
+		const auto model = getConfiguredModel(player, &overrideTeam);
+		if (!model) {
+			if (print) advancedfx::Warning("mirv_demo_agent: no model configured for xuid=%llu team=%s.\n", (unsigned long long)xuid, teamName(getPawnTeam(player.pawn)));
+			return false;
+		}
+		return applyPlayerModel(player, overrideTeam, model->c_str(), print);
 	}
 
 	if (print) advancedfx::Warning("mirv_demo_agent: no current player pawn found for xuid=%llu.\n", (unsigned long long)xuid);
 	return false;
 }
 
-bool setXuidOverride(uint64_t xuid, const char* modelName, bool applyNow)
+bool setXuidOverride(uint64_t xuid, int team, const char* modelName, bool applyNow)
 {
 	if (!modelName || !modelName[0]) {
 		advancedfx::Warning("mirv_demo_agent: invalid model.\n");
 		return false;
 	}
 
-	g_PlayerModelOverrides[xuid] = modelName;
-	g_AppliedModelStates.erase(xuid);
+	g_PlayerModelOverrides[xuid][team] = modelName;
+	if (0 == team) {
+		g_AppliedModelStates.erase(xuid);
+	} else {
+		g_AppliedModelStates[xuid].erase(team);
+	}
 	advancedfx::Message(
-		"mirv_demo_agent: configured xuid=%s%llu model=%s\n",
+		"mirv_demo_agent: configured xuid=%s%llu team=%s model=%s\n",
 		looksLikeSteamId(xuid) ? "x" : "",
 		(unsigned long long)xuid,
+		teamName(team),
 		modelName
 	);
 
@@ -449,7 +558,7 @@ bool setXuidOverride(uint64_t xuid, const char* modelName, bool applyNow)
 	return true;
 }
 
-bool setSlotOverride(int slot, const char* modelName)
+bool setSlotOverride(int slot, int team, const char* modelName)
 {
 	const auto players = collectPlayerPawns();
 	if (slot < 1 || (int)players.size() < slot) {
@@ -459,13 +568,14 @@ bool setSlotOverride(int slot, const char* modelName)
 
 	const auto& player = players[slot - 1];
 	advancedfx::Message(
-		"mirv_demo_agent: slot %i resolves to xuid=%s%llu name=%s.\n",
+		"mirv_demo_agent: slot %i resolves to team=%s xuid=%s%llu name=%s.\n",
 		slot,
+		teamName(getPawnTeam(player.pawn)),
 		looksLikeSteamId(player.xuid) ? "x" : "",
 		(unsigned long long)player.xuid,
 		getControllerName(player.controller)
 	);
-	return setXuidOverride(player.xuid, modelName, true);
+	return setXuidOverride(player.xuid, team, modelName, true);
 }
 
 void inspectPlayers()
@@ -475,8 +585,8 @@ void inspectPlayers()
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		(void*)g_SetModel,
-		(unsigned long long)g_PlayerModelOverrides.size(),
-		(unsigned long long)g_AppliedModelStates.size()
+		(unsigned long long)countConfiguredOverrides(),
+		(unsigned long long)countRememberedStates()
 	);
 
 	if (!g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
@@ -485,14 +595,16 @@ void inspectPlayers()
 	}
 
 	const auto players = collectPlayerPawns();
-	advancedfx::Message("slot / entry / class / identityFlags / modelHandle / modelNameSymbol / xuid / name / configuredModel\n");
+	advancedfx::Message("slot / entry / team / class / identityFlags / modelHandle / modelNameSymbol / xuid / name / configuredTeam / configuredModel\n");
 	for (size_t i = 0; i < players.size(); ++i) {
 		const auto& player = players[i];
-		const auto modelIt = g_PlayerModelOverrides.find(player.xuid);
+		int overrideTeam = 0;
+		const auto model = getConfiguredModel(player, &overrideTeam);
 		advancedfx::Message(
-			"%llu / %i / %s / 0x%08x / 0x%p / 0x%08x / %s%llu / %s / %s\n",
+			"%llu / %i / %s / %s / 0x%08x / 0x%p / 0x%08x / %s%llu / %s / %s / %s\n",
 			(unsigned long long)(i + 1),
 			player.entry,
+			teamName(getPawnTeam(player.pawn)),
 			player.pawn->GetClientClassName() ? player.pawn->GetClientClassName() : "",
 			getEntityIdentityFlags(player.pawn),
 			(void*)getModelHandle(player.pawn),
@@ -500,7 +612,8 @@ void inspectPlayers()
 			looksLikeSteamId(player.xuid) ? "x" : "",
 			(unsigned long long)player.xuid,
 			getControllerName(player.controller),
-			g_PlayerModelOverrides.end() == modelIt ? "<none>" : modelIt->second.c_str()
+			model ? teamName(overrideTeam) : "<none>",
+			model ? model->c_str() : "<none>"
 		);
 	}
 }
@@ -514,15 +627,16 @@ void printStatus()
 	if (g_pEntityList && *g_pEntityList && g_GetEntityFromIndex) {
 		const auto players = collectPlayerPawns();
 		for (const auto& player : players) {
-			auto it = g_PlayerModelOverrides.find(player.xuid);
-			if (g_PlayerModelOverrides.end() == it) continue;
+			int overrideTeam = 0;
+			const auto model = getConfiguredModel(player, &overrideTeam);
+			if (!model) continue;
 
 			++configuredPresent;
 			if (!canSafelyAutoRepair(player.pawn)) {
 				++unsafe;
 				continue;
 			}
-			if (shouldRepairPlayerModel(player, it->second)) {
+			if (shouldRepairPlayerModel(player, overrideTeam, *model)) {
 				++mismatched;
 			}
 		}
@@ -532,8 +646,8 @@ void printStatus()
 		"mirv_demo_agent status: playingDemo=%i demoTick=%i configured=%llu remembered=%llu present=%i unsafe=%i mismatched=%i setModel=%p\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
-		(unsigned long long)g_PlayerModelOverrides.size(),
-		(unsigned long long)g_AppliedModelStates.size(),
+		(unsigned long long)countConfiguredOverrides(),
+		(unsigned long long)countRememberedStates(),
 		configuredPresent,
 		unsafe,
 		mismatched,
@@ -555,9 +669,9 @@ void printHelp(const char* arg0)
 		"%s inspect - Print current player pawn slots, XUIDs, model state, and configured overrides.\n"
 		"%s status - Print a concise override / repair status summary.\n"
 		"%s agents - List known agent item definition IDs, internal names, and model paths.\n"
-		"%s xuid <steamid64> set <agentInternalName|itemDef|modelPath> - Configure and apply one player's model.\n"
-		"%s xuid <steamid64> clear - Clear one player's configured model.\n"
-		"%s slot <1-10> set <agentInternalName|itemDef|modelPath> - Configure and apply the current slot's model by resolved XUID.\n"
+		"%s xuid <steamid64> set <agentInternalName|itemDef|modelPath> [team=T|CT|any] - Configure and apply one player's model.\n"
+		"%s xuid <steamid64> clear [team=T|CT|any] - Clear one player's configured model.\n"
+		"%s slot <1-10> set <agentInternalName|itemDef|modelPath> [team=T|CT|any] - Configure and apply the current slot's model by resolved XUID.\n"
 		"%s apply - Apply all configured XUID model overrides once during demo playback.\n"
 		"%s clear - Clear all configured model overrides.\n"
 		"Notes:\n"
@@ -659,23 +773,52 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 
 			if (0 == _stricmp("set", args->ArgV(3))) {
 				if (argc < 5) {
-					advancedfx::Warning("mirv_demo_agent: expected xuid <steamid64> set <agentInternalName|itemDef|modelPath>.\n");
+					advancedfx::Warning("mirv_demo_agent: expected xuid <steamid64> set <agentInternalName|itemDef|modelPath> [team=T|CT|any].\n");
 					return;
 				}
 
+				int team = 0;
+				if (!parseOptionalTeamArgs(args, 5, argc, team)) {
+					advancedfx::Warning("mirv_demo_agent: invalid team option. Use team=T, team=CT, or team=any.\n");
+					return;
+				}
 				const char* model = resolveModelArgument(args->ArgV(4), true);
-				setXuidOverride(xuid, model, true);
+				setXuidOverride(xuid, team, model, true);
 				return;
 			}
 
 			if (0 == _stricmp("clear", args->ArgV(3))) {
-				const auto erased = g_PlayerModelOverrides.erase(xuid);
-				g_AppliedModelStates.erase(xuid);
+				int team = -1;
+				if (4 < argc) {
+					team = 0;
+					if (!parseOptionalTeamArgs(args, 4, argc, team)) {
+						advancedfx::Warning("mirv_demo_agent: invalid team option. Use team=T, team=CT, or team=any.\n");
+						return;
+					}
+				}
+
+				size_t erased = 0;
+				if (-1 == team) {
+					erased = g_PlayerModelOverrides.erase(xuid);
+					g_AppliedModelStates.erase(xuid);
+				} else {
+					auto overridesIt = g_PlayerModelOverrides.find(xuid);
+					if (g_PlayerModelOverrides.end() != overridesIt) {
+						erased = overridesIt->second.erase(team);
+						if (overridesIt->second.empty()) g_PlayerModelOverrides.erase(overridesIt);
+					}
+					auto stateIt = g_AppliedModelStates.find(xuid);
+					if (g_AppliedModelStates.end() != stateIt) {
+						stateIt->second.erase(team);
+						if (stateIt->second.empty()) g_AppliedModelStates.erase(stateIt);
+					}
+				}
 				advancedfx::Message(
-					"mirv_demo_agent: %s override for xuid=%s%llu.\n",
+					"mirv_demo_agent: %s override for xuid=%s%llu team=%s.\n",
 					erased ? "cleared" : "had no",
 					looksLikeSteamId(xuid) ? "x" : "",
-					(unsigned long long)xuid
+					(unsigned long long)xuid,
+					-1 == team ? "all" : teamName(team)
 				);
 				return;
 			}
@@ -687,12 +830,17 @@ CON_COMMAND(mirv_demo_agent, "Prototype CS2 demo playback player model / agent o
 		if (0 == _stricmp("slot", arg1)) {
 			int slot = 0;
 			if (argc < 5 || !parseSlot(args->ArgV(2), slot) || 0 != _stricmp("set", args->ArgV(3))) {
-				advancedfx::Warning("mirv_demo_agent: expected slot <1-10> set <agentInternalName|itemDef|modelPath>.\n");
+				advancedfx::Warning("mirv_demo_agent: expected slot <1-10> set <agentInternalName|itemDef|modelPath> [team=T|CT|any].\n");
 				return;
 			}
 
+			int team = 0;
+			if (!parseOptionalTeamArgs(args, 5, argc, team)) {
+				advancedfx::Warning("mirv_demo_agent: invalid team option. Use team=T, team=CT, or team=any.\n");
+				return;
+			}
 			const char* model = resolveModelArgument(args->ArgV(4), true);
-			setSlotOverride(slot, model);
+			setSlotOverride(slot, team, model);
 			return;
 		}
 	}

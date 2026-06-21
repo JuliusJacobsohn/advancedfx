@@ -1,6 +1,6 @@
 # CS2 Agent Model Reference
 
-Generated from `research/cs2-items-vrf/scripts/items/items_game.txt`. Use the `Internal name` value directly with `mirv_demo_agent xuid <steamid64> set <name>` or `mirv_demo_agent slot <1-10> set <name>`. Direct `agents/models/...vmdl` paths still work. Numeric item definition IDs are also accepted by `mirv_demo_agent` when they match this table.
+Generated from `research/cs2-items-vrf/scripts/items/items_game.txt`. Use the `Internal name` value directly with `mirv_demo_agent xuid <steamid64> set <name> [team=T|CT|any]` or `mirv_demo_agent slot <1-10> set <name> [team=T|CT|any]`. Direct `agents/models/...vmdl` paths still work. Numeric item definition IDs are also accepted by `mirv_demo_agent` when they match this table.
 
 To update this list after CS2 adds agents:
 

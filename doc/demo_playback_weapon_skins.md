@@ -1,6 +1,6 @@
 # Demo Playback Weapon Skins
 
-Status: implementation restarted on `codex/demo-skin-pipeline`. The current branch has the first in-tree `mirv_demo_skin` implementation for persistent demo-time econ/item mutation. Visible material regeneration, glove material correctness, and physical StatTrak counter attachment still need runtime verification and likely deeper client refresh hooks.
+Status: implementation restarted on `codex/demo-skin-pipeline`. The current branch has the first in-tree `mirv_demo_skin` implementation for persistent demo-time econ/item mutation. Normal weapon paint overrides on an existing weapon definition are the current focus and have worked in local tests for Glock Fade and M4A4 Howl. Knife model replacement, glove type replacement, and physical StatTrak counter attachment still need deeper client/model work.
 
 Goal: local/demo-only visual override for fragmovie rendering, starting with by-XUID weapon paint kits such as AWP Dragon Lore or USP-S Printstream.
 
@@ -9,8 +9,8 @@ Current command:
 ```text
 mirv_demo_skin byXuid add x<steamid64> active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id>] [meshGroup=<1|2>] [defIndex=<id>]
 mirv_demo_skin byXuid remove x<steamid64>
-mirv_demo_skin xuid <steamid64> weapon active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id|off>] [defIndex=<weaponDef>] [itemDef=<itemDef>] [meshGroup=<mask>]
-mirv_demo_skin xuid <steamid64> gloves paintKit=<id> wear=<float> seed=<id> defIndex=<gloveItemDef>
+mirv_demo_skin xuid <steamid64> weapon active|all paintKit=<id> wear=<float> seed=<id> [statTrak=<id|off>|killCount=<id>|kills=<id>] [defIndex=<weaponDef>] [itemDef=<itemDef>] [meshGroup=<mask>] [team=T|CT|any]
+mirv_demo_skin xuid <steamid64> gloves paintKit=<id> wear=<float> seed=<id> defIndex=<gloveItemDef> [team=T|CT|any]
 mirv_demo_skin xuid <steamid64> clear
 mirv_demo_skin clear
 mirv_demo_skin print
@@ -25,6 +25,7 @@ Examples:
 mirv_demo_skin byXuid add x76561198000000000 active paintKit=344 wear=0.01 seed=0
 mirv_demo_skin byXuid add x76561198000000000 all paintKit=1142 wear=0.01 seed=0 statTrak=1337 meshGroup=1
 mirv_demo_skin xuid x76561198000000000 weapon active paintKit=1142 wear=0.01 pattern=777 statTrak=1337 defIndex=61 meshGroup=2
+mirv_demo_skin xuid x76561198000000000 weapon all paintKit=38 wear=0.0001 seed=0 killCount=1234 defIndex=4 team=T meshGroup=2
 mirv_demo_skin xuid x76561198000000000 gloves paintKit=10006 wear=0.08 seed=321 defIndex=5032
 ```
 
@@ -35,10 +36,13 @@ Implemented behavior:
 - Resolves controller XUID to pawn to active weapon.
 - `active` patches the active weapon.
 - `active` auto-locks to the currently held non-knife weapon definition when possible, so a USP-S override does not later bleed onto an R8 after the player buys/switches weapons. `defIndex=<id>` can set this manually.
-- `all` patches `CPlayer_WeaponServices::m_hMyWeapons` plus active weapon fallback, but skips knife entities for normal weapon paint overrides. Applying a USP/AWP paint kit to a knife produced bad render state and a crash when switching weapons.
+- For match-wide normal weapon overrides, prefer `weapon all ... defIndex=<weaponDef> [team=T|CT|any]`. This stores one XUID-side-weapon rule and reapplies it every frame to any matching weapon entity the player currently owns. For example, a T-side Glock rule applies every time that player has a Glock on T side, including after round changes, demo skips, and new weapon entity creation.
+- `all` patches `CPlayer_WeaponServices::m_hMyWeapons` plus active weapon fallback, but skips knife entities for normal weapon paint overrides unless an explicit experimental `itemDef=` replacement is supplied. Applying a normal weapon paint kit to a knife produced bad render state and a crash when switching weapons.
 - Reapplies during `FRAME_RENDER_PASS`.
 - Writes fallback paint kit, seed, wear, StatTrak, owner XUID, item ID high/low, account ID, quality, initialized state, and material/visual dirty flags.
 - Uses CS2's faux item-id preview shape (`0xF000000000000000 | paintKit << 16 | itemDefinitionIndex`) instead of a monotonically increasing fake id. This matches public CS2 preview-panel code and may be required by composite material generation.
+- `statTrak=<count>`, `killCount=<count>`, and `kills=<count>` are equivalent. `statTrak=off` writes the fallback counter as disabled and clears the item quality back to normal.
+- `team=T` and `team=CT` rules are exact-side rules. Omitting `team=` stores a backward-compatible `team=any` rule.
 - `gloves` currently writes the pawn `CCSPlayerPawn::m_EconGloves` item view, including item definition, fake item id, owner account, and initialized state. Paint/wear/seed still need the attribute/material path to become visually reliable.
 - Current in-tree implementation does not yet call Panorama `InventoryAPI.PrecacheCustomMaterials`, the vendor `RegenerateWeaponSkins` primitive, or a fake inventory/SO-cache path. Those remain the next likely material-refresh steps.
 
