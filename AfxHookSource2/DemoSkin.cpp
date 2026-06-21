@@ -7,10 +7,13 @@
 #include "SchemaSystem.h"
 #include "WrpConsole.h"
 
+#include "../shared/binutils.h"
+
 #include "../deps/release/prop/AfxHookSource/SourceSdkShared.h"
 #include "../deps/release/prop/cs2/sdk_src/public/cdll_int.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -65,7 +68,36 @@ struct WeaponAssignment {
 std::unordered_map<uint64_t, std::vector<SkinRule>> g_SkinRules;
 std::unordered_map<uint32_t, WeaponAssignment> g_WeaponAssignments;
 std::unordered_set<uint64_t> g_RefreshRequestedItemIds;
+std::unordered_set<uint64_t> g_MaterialRefreshKeys;
 bool g_WarnedMissingOffsets = false;
+bool g_WarnedMissingRegenerateWeaponSkins = false;
+uint64_t g_MaterialRefreshAttempts = 0;
+uint64_t g_MaterialRefreshes = 0;
+int g_LastDemoTick = -1;
+
+struct AttributeVectorHeader {
+	uint64_t size = 0;
+	uintptr_t data = 0;
+};
+
+struct CEconItemAttribute {
+	uintptr_t vtable = 0;
+	uintptr_t owner = 0;
+	unsigned char pad0[32] = {};
+	uint16_t defIndex = 0;
+	uint16_t pad1 = 0;
+	float value = 0.0f;
+	float initValue = 0.0f;
+	int32_t refundableCurrency = 0;
+	bool setBonus = false;
+	unsigned char pad2[7] = {};
+};
+
+static_assert(sizeof(CEconItemAttribute) == 0x48, "Unexpected CEconItemAttribute layout.");
+
+using RegenerateWeaponSkins_t = void(*)();
+RegenerateWeaponSkins_t g_RegenerateWeaponSkins = nullptr;
+bool g_TriedResolveRegenerateWeaponSkins = false;
 
 bool isPlayingDemo()
 {
@@ -102,6 +134,15 @@ bool hasCoreWeaponOffsets()
 bool hasGloveOffsets()
 {
 	return hasCoreWeaponOffsets() && 0 != g_clientDllOffsets.CCSPlayerPawn.m_EconGloves;
+}
+
+bool hasMaterialOffsets()
+{
+	return
+		0 != g_clientDllOffsets.C_EconItemView.m_bDisallowSOC &&
+		0 != g_clientDllOffsets.C_EconItemView.m_AttributeList &&
+		0 != g_clientDllOffsets.C_EconItemView.m_NetworkedDynamicAttributes &&
+		0 != g_clientDllOffsets.CAttributeList.m_Attributes;
 }
 
 bool ensureSkinOffsets(bool print)
@@ -420,6 +461,97 @@ void requestCustomEconRefresh(uint64_t fakeItemId)
 	g_pEngineToClient->ExecuteClientCmd(0, "clientside_reload_custom_econ", true);
 }
 
+RegenerateWeaponSkins_t resolveRegenerateWeaponSkins(bool print)
+{
+	if (g_TriedResolveRegenerateWeaponSkins) return g_RegenerateWeaponSkins;
+	g_TriedResolveRegenerateWeaponSkins = true;
+
+	HMODULE clientDll = GetModuleHandleA("client.dll");
+	if (clientDll) {
+		Afx::BinUtils::ImageSectionsReader sections(clientDll);
+		for (; !sections.Eof(); sections.Next()) {
+			auto section = sections.Get();
+			if (!section) continue;
+			const DWORD codeFlags = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE;
+			if (codeFlags != (section->Characteristics & codeFlags)) continue;
+
+			auto found = Afx::BinUtils::FindPatternString(
+				sections.GetMemRange(),
+				"48 83 EC ?? E8 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 10"
+			);
+			if (!found.IsEmpty()) {
+				g_RegenerateWeaponSkins = (RegenerateWeaponSkins_t)found.Start;
+				break;
+			}
+		}
+	}
+
+	if (print && !g_RegenerateWeaponSkins && !g_WarnedMissingRegenerateWeaponSkins) {
+		g_WarnedMissingRegenerateWeaponSkins = true;
+		advancedfx::Warning("mirv_demo_skin: RegenerateWeaponSkins signature was not found.\n");
+	}
+
+	return g_RegenerateWeaponSkins;
+}
+
+CEconItemAttribute makeMaterialAttribute(uint16_t defIndex, float value)
+{
+	CEconItemAttribute attribute;
+	attribute.defIndex = defIndex;
+	attribute.value = value;
+	attribute.initValue = value;
+	return attribute;
+}
+
+uint64_t makeMaterialRefreshKey(uint32_t weaponKey, uint64_t fakeItemId, const SkinRule& rule)
+{
+	uint64_t key = ((uint64_t)weaponKey << 32) ^ fakeItemId;
+	key ^= ((uint64_t)(uint32_t)rule.seed << 17);
+	key ^= (uint32_t)(rule.wear * 1000000.0f);
+	if (rule.hasMeshGroup) key ^= (rule.meshGroup << 3);
+	return key;
+}
+
+bool regenerateWeaponMaterial(CEntityInstance* weapon, unsigned char* itemView, const SkinRule& rule, uint64_t fakeItemId, bool print)
+{
+	if (!weapon || !itemView || 0 == fakeItemId) return false;
+	if (!hasMaterialOffsets()) return false;
+
+	const uint32_t weaponKey = getWeaponKey(weapon);
+	if (0 == weaponKey) return false;
+	const uint64_t materialKey = makeMaterialRefreshKey(weaponKey, fakeItemId, rule);
+	if (!g_MaterialRefreshKeys.insert(materialKey).second) return true;
+
+	++g_MaterialRefreshAttempts;
+	auto regenerate = resolveRegenerateWeaponSkins(print);
+	if (!regenerate) return false;
+
+	*(bool*)(itemView + g_clientDllOffsets.C_EconItemView.m_bDisallowSOC) = false;
+
+	auto attributesHeader = (AttributeVectorHeader*)(
+		itemView +
+		g_clientDllOffsets.C_EconItemView.m_AttributeList +
+		g_clientDllOffsets.CAttributeList.m_Attributes
+	);
+
+	const AttributeVectorHeader oldHeader = *attributesHeader;
+	std::vector<CEconItemAttribute> attributes;
+	attributes.push_back(makeMaterialAttribute(6, (float)rule.paintKit));
+	attributes.push_back(makeMaterialAttribute(7, (float)rule.seed));
+	attributes.push_back(makeMaterialAttribute(8, rule.wear));
+
+	AttributeVectorHeader newHeader;
+	newHeader.size = attributes.size();
+	newHeader.data = (uintptr_t)attributes.data();
+	*attributesHeader = newHeader;
+
+	regenerate();
+
+	*attributesHeader = oldHeader;
+	++g_MaterialRefreshes;
+	return true;
+}
+
 bool patchItemView(unsigned char* itemView, const SkinRule& rule, uint64_t ownerXuid, int currentItemDef, bool allowItemDefWrite, uint64_t* outFakeItemId)
 {
 	if (!itemView) return false;
@@ -438,6 +570,9 @@ bool patchItemView(unsigned char* itemView, const SkinRule& rule, uint64_t owner
 	*(uint32_t*)(itemView + g_clientDllOffsets.C_EconItemView.m_iItemIDLow) = (uint32_t)fakeItemId;
 	*(uint32_t*)(itemView + g_clientDllOffsets.C_EconItemView.m_iAccountID) = getAccountId(ownerXuid);
 	*(bool*)(itemView + g_clientDllOffsets.C_EconItemView.m_bInitialized) = true;
+	if (0 != g_clientDllOffsets.C_EconItemView.m_bDisallowSOC) {
+		*(bool*)(itemView + g_clientDllOffsets.C_EconItemView.m_bDisallowSOC) = false;
+	}
 
 	if (rule.hasStatTrak && 0 <= rule.statTrak) {
 		*(int32_t*)(itemView + g_clientDllOffsets.C_EconItemView.m_iEntityQuality) = 9;
@@ -478,6 +613,7 @@ bool patchWeapon(CEntityInstance* weapon, SkinRule& rule, uint64_t ownerXuid, bo
 	uint64_t fakeItemId = 0;
 	patchItemView(itemView, rule, ownerXuid, currentDef, 0 < rule.itemDefIndex, &fakeItemId);
 	applyMeshGroup(weapon, rule);
+	regenerateWeaponMaterial(weapon, itemView, rule, fakeItemId, print);
 	requestCustomEconRefresh(fakeItemId);
 
 	if (print) {
@@ -602,9 +738,20 @@ ApplyStats applyConfiguredRules(bool print)
 
 	if (!isPlayingDemo() || !g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) {
 		g_WeaponAssignments.clear();
+		g_MaterialRefreshKeys.clear();
+		g_LastDemoTick = -1;
 		return stats;
 	}
 	if (!ensureSkinOffsets(false)) return stats;
+
+	const int currentTick = getCurrentDemoTick();
+	if (0 <= g_LastDemoTick) {
+		const int delta = currentTick - g_LastDemoTick;
+		if (delta < 0 || 128 < delta) {
+			g_MaterialRefreshKeys.clear();
+		}
+	}
+	g_LastDemoTick = currentTick;
 
 	const auto players = collectPlayerPawns();
 	for (const auto& player : players) {
@@ -738,7 +885,7 @@ void printStatus()
 {
 	const ApplyStats stats = applyConfiguredRules(false);
 	advancedfx::Message(
-		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i applicable=%i assigned=%llu candidates=%i patched=%i skipped=%i refreshed=%llu coreOffsets=%i gloveOffsets=%i\n",
+		"mirv_demo_skin status: playingDemo=%i demoTick=%i configured=%i present=%i applicable=%i assigned=%llu candidates=%i patched=%i skipped=%i refreshed=%llu materialAttempts=%llu materialRefreshes=%llu coreOffsets=%i gloveOffsets=%i materialOffsets=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		stats.configured,
@@ -749,8 +896,11 @@ void printStatus()
 		stats.patched,
 		stats.skipped,
 		(unsigned long long)g_RefreshRequestedItemIds.size(),
+		(unsigned long long)g_MaterialRefreshAttempts,
+		(unsigned long long)g_MaterialRefreshes,
 		hasCoreWeaponOffsets() ? 1 : 0,
-		hasGloveOffsets() ? 1 : 0
+		hasGloveOffsets() ? 1 : 0,
+		hasMaterialOffsets() ? 1 : 0
 	);
 }
 
@@ -786,13 +936,17 @@ void inspect()
 	}
 
 	advancedfx::Message(
-		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu assigned=%llu coreOffsets=%i gloveOffsets=%i myWeapons=%i meshGroup=%i\n",
+		"mirv_demo_skin inspect: playingDemo=%i demoTick=%i configured=%llu assigned=%llu materialAttempts=%llu materialRefreshes=%llu regenFn=%i coreOffsets=%i gloveOffsets=%i materialOffsets=%i myWeapons=%i meshGroup=%i\n",
 		isPlayingDemo() ? 1 : 0,
 		getCurrentDemoTick(),
 		(unsigned long long)configuredRules,
 		(unsigned long long)g_WeaponAssignments.size(),
+		(unsigned long long)g_MaterialRefreshAttempts,
+		(unsigned long long)g_MaterialRefreshes,
+		resolveRegenerateWeaponSkins(false) ? 1 : 0,
 		hasCoreWeaponOffsets() ? 1 : 0,
 		hasGloveOffsets() ? 1 : 0,
+		hasMaterialOffsets() ? 1 : 0,
 		0 != g_clientDllOffsets.CPlayer_WeaponServices.m_hMyWeapons ? 1 : 0,
 		0 != g_clientDllOffsets.CModelState.m_MeshGroupMask ? 1 : 0
 	);

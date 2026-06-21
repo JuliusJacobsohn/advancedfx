@@ -123,7 +123,14 @@ struct ClientDllOffsets_t {
 		ptrdiff_t m_iItemIDLow = 0; // uint32
 		ptrdiff_t m_iAccountID = 0; // uint32
 		ptrdiff_t m_bInitialized = 0; // bool
+		ptrdiff_t m_bDisallowSOC = 0; // bool
+		ptrdiff_t m_AttributeList = 0; // CAttributeList
+		ptrdiff_t m_NetworkedDynamicAttributes = 0; // CAttributeList
 	} C_EconItemView;
+
+	struct CAttributeList {
+		ptrdiff_t m_Attributes = 0; // C_UtlVectorEmbeddedNetworkVar<CEconItemAttribute>
+	} CAttributeList;
 
 	struct CPlayer_ObserverServices {
 		ptrdiff_t m_iObserverMode = 0; // uint8                                   

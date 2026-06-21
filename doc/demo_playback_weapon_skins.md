@@ -83,6 +83,7 @@ Known local test results from earlier skin investigation:
 - After removing those unsafe writes, hands are visible again and switching to the knife no longer crashes. The remaining blocker is visual correctness: `meshGroup=1` produces the custom material but it is misaligned/wrong-looking; `meshGroup=2` reverts to the default material for the tested USP-S.
 - The stricter vendor lifecycle fixed the tested USP-S Printstream material: `meshGroup=2`, fake item id, fallback paint kept, and empty temporary attributes produce the correct visible skin after the demo advances.
 - After switching away and back, the demo can still stomp UI/name fallback fields while the generated material remains correct. The steady-state path now reapplies fallback/UI fields and writes `m_NetworkedDynamicAttributes` without recreating the temporary material vector in `m_AttributeList`.
+- 2026-06-21 seanse multi-weapon test on `replays/match730_003826236581316920032_0847574390_182.dem`: `RegenerateWeaponSkins` resolved and was called (`regenFn=1`, `materialRefreshes=1`) after adding runtime material offsets. Visual result is still not solid: most weapons stayed default while UI names / StatTrak counters changed, Glock Neo-Noir looked misaligned, Negev Mjolnir appeared briefly but likely misaligned, and after skipping the Negev returned to default. This means the current regeneration call is not sufficient for persistent, correctly aligned materials across demo seeks.
 
 Fields currently used by the in-tree implementation:
 
@@ -105,6 +106,10 @@ Fields currently used by the in-tree implementation:
 - `C_EconItemView::m_iItemIDLow`
 - `C_EconItemView::m_iAccountID`
 - `C_EconItemView::m_bInitialized`
+- `C_EconItemView::m_bDisallowSOC`
+- `C_EconItemView::m_AttributeList`
+- `C_EconItemView::m_NetworkedDynamicAttributes`
+- `CAttributeList::m_Attributes`
 - `CSkeletonInstance::m_modelState`
 - `CModelState::m_MeshGroupMask`
 

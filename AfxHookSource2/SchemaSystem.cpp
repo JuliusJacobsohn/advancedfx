@@ -137,6 +137,10 @@ void initSchemaSystemOffsets()
 	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDLow, "client.dll", "C_EconItemView", "m_iItemIDLow")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iItemIDLow, "client.dll", "CEconItemView", "m_iItemIDLow");
 	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_iAccountID, "client.dll", "C_EconItemView", "m_iAccountID")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_iAccountID, "client.dll", "CEconItemView", "m_iAccountID");
 	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_bInitialized, "client.dll", "C_EconItemView", "m_bInitialized")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_bInitialized, "client.dll", "CEconItemView", "m_bInitialized");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_bDisallowSOC, "client.dll", "C_EconItemView", "m_bDisallowSOC")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_bDisallowSOC, "client.dll", "CEconItemView", "m_bDisallowSOC");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_AttributeList, "client.dll", "C_EconItemView", "m_AttributeList")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_AttributeList, "client.dll", "CEconItemView", "m_AttributeList");
+	if (!getOffset(&g_clientDllOffsets.C_EconItemView.m_NetworkedDynamicAttributes, "client.dll", "C_EconItemView", "m_NetworkedDynamicAttributes")) getOptionalOffset(&g_clientDllOffsets.C_EconItemView.m_NetworkedDynamicAttributes, "client.dll", "CEconItemView", "m_NetworkedDynamicAttributes");
+	getOptionalOffset(&g_clientDllOffsets.CAttributeList.m_Attributes, "client.dll", "CAttributeList", "m_Attributes");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_CameraServices.m_hViewEntity, "client.dll", "CPlayer_CameraServices", "m_hViewEntity");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_ObserverServices.m_iObserverMode, "client.dll", "CPlayer_ObserverServices", "m_iObserverMode");
 	bOk = bOk && getOffset(&g_clientDllOffsets.CPlayer_ObserverServices.m_hObserverTarget, "client.dll", "CPlayer_ObserverServices", "m_hObserverTarget");
