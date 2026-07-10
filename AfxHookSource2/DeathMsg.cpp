@@ -1301,17 +1301,25 @@ void __fastcall My_Panorama_CStylePropertyWashColor_Clone(void * This, void * pT
 	}
 }
 
-void getDeathMsgAddrs(HMODULE clientDll) {
+bool getDeathMsgAddrs(HMODULE clientDll) {
+	bool result = true;
+
 	// can be found with strings like "attacker" and "userid", etc. it basically takes all info from player_death event, called by rbanch in a function that references "player_death", "realtime_passthrough"
 	if (auto addr = getAddress(clientDll, "48 89 4c 24 08 55 53 41 54 41 55 41 56 48 8d ac 24 60 f7 ff ff")) {
 		g_Original_handlePlayerDeath = (g_Original_handlePlayerDeath_t)(addr);
-	} else ErrorBox(MkErrStr(__FILE__, __LINE__));
+	} else {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		result = false;
+	}
 
 	// called in multiple places with strings like "userid", "attacker", etc. as first argument, length as second argument and length XOR 0x31415926
 	// e.g. in function above too
 	if (auto addr = getAddress(clientDll, "48 83 EC 28 45 8B D0 4C 8B C9 48 83 FA 04 0F 82 ?? ?? ?? ?? 0F B6 09 48 89 5C 24 20 8D 41 BF 3C 19 77 03 80 C1 20")) {
 		g_Original_hashString = (g_Original_hashString_t)(addr);
-	} else ErrorBox(MkErrStr(__FILE__, __LINE__));	
+	} else {
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		result = false;
+	}
 
 	// snippet from function handlePlayerDeath above	
 	//   if (*(char *)(lVar17 + 0xb8) == '\0') {
@@ -1327,41 +1335,49 @@ void getDeathMsgAddrs(HMODULE clientDll) {
 	//   }
 	size_t g_Original_getLocalSteamId_addr = getAddress(clientDll,"40 53 48 83 EC ?? 8B 51 ?? 48 8B D9 83 FA FF 0F 84 ?? ?? ?? ?? 4C 8B 0D ?? ?? ?? ??");
 	if (0 == g_Original_getLocalSteamId_addr) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));	
+		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		result = false;
 	};
 
 	g_Original_getLocalSteamId = (g_Original_getLocalSteamId_t)(g_Original_getLocalSteamId_addr);
 
 	size_t populateFromPlayerSlot = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 8B CA E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 0F 84 ?? ?? ?? ??");
 	if (0 == populateFromPlayerSlot) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		advancedfx::Warning("AFXWARNING: avatar player-slot replacement is unavailable for this CS2 build.\n");
+	} else {
+		g_Original_CSGOAvatarImage_PopulateFromPlayerSlot = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlot;
+		g_CSGO_GetPlayerFromSlot = (CSGO_GetPlayerFromSlot_t)relativeCallTarget(populateFromPlayerSlot + 0x0f);
 	}
-	g_Original_CSGOAvatarImage_PopulateFromPlayerSlot = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlot;
-	g_CSGO_GetPlayerFromSlot = (CSGO_GetPlayerFromSlot_t)relativeCallTarget(populateFromPlayerSlot + 0x0f);
 
-	size_t populateFromPlayerSlotNative = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 8B CA E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 0F 84 ?? ?? ?? ?? 8B 90 F8 03 00 00 C1 EA 08 F6 C2 01");
+	size_t populateFromPlayerSlotNative = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 8B CA E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 0F 84 ?? ?? ?? ?? 8B 90 F4 03 00 00 C1 EA 08 F6 C2 01");
 	if (0 == populateFromPlayerSlotNative) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		advancedfx::Warning("AFXWARNING: native avatar player-slot replacement is unavailable for this CS2 build.\n");
+	} else {
+		g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlotNative;
 	}
-	g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative = (CSGOAvatarImage_PopulateFromPlayerSlot_t)populateFromPlayerSlotNative;
 
 	size_t populateFromAvatarHandle = getAddress(clientDll, "48 89 5C 24 08 57 48 83 EC 20 0F B7 FA B8 FF FF 00 00 48 8B D9 66 3B F8");
 	if (0 == populateFromAvatarHandle) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		advancedfx::Warning("AFXWARNING: avatar-handle replacement is unavailable for this CS2 build.\n");
+	} else {
+		g_Original_CSGOAvatarImage_PopulateFromAvatarHandle = (CSGOAvatarImage_PopulateFromAvatarHandle_t)populateFromAvatarHandle;
 	}
-	g_Original_CSGOAvatarImage_PopulateFromAvatarHandle = (CSGOAvatarImage_PopulateFromAvatarHandle_t)populateFromAvatarHandle;
 
 	size_t populateFromSteamId = getAddress(clientDll, "48 89 5C 24 10 57 48 83 EC 20 48 8B 02 48 8B D9 48 85 C0 48 8D 0D ?? ?? ?? ?? 48 8B FA 48 0F 45 C8 E8 ?? ?? ?? ??");
 	if (0 == populateFromSteamId) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		advancedfx::Warning("AFXWARNING: Steam-ID avatar image replacement is unavailable for this CS2 build.\n");
+	} else {
+		g_CSGOAvatarImage_MakeAvatarImageSource = (CSGOAvatarImage_MakeAvatarImageSource_t)relativeCallTarget(populateFromSteamId + 0x21);
 	}
-	g_CSGOAvatarImage_MakeAvatarImageSource = (CSGOAvatarImage_MakeAvatarImageSource_t)relativeCallTarget(populateFromSteamId + 0x21);
 
-	size_t getPlayerXuidStringFromPlayerSlot = getAddress(clientDll, "40 53 48 83 EC 20 48 63 DA 8B CB E8 ?? ?? ?? ?? 48 85 C0 74 ?? 8B 88 F8 03 00 00 C1 E9 08 F6 C1 01");
+	size_t getPlayerXuidStringFromPlayerSlot = getAddress(clientDll, "40 53 48 83 EC 20 48 63 DA 8B CB E8 ?? ?? ?? ?? 48 85 C0 74 ?? 8B 88 F4 03 00 00 C1 E9 08 F6 C1 01");
 	if (0 == getPlayerXuidStringFromPlayerSlot) {
-		ErrorBox(MkErrStr(__FILE__, __LINE__));
+		advancedfx::Warning("AFXWARNING: avatar XUID lookup is unavailable for this CS2 build.\n");
+	} else {
+		g_CSGO_GetPlayerXuid = (CSGO_GetPlayerXuid_t)relativeCallTarget(getPlayerXuidStringFromPlayerSlot + 0x2b);
 	}
-	g_CSGO_GetPlayerXuid = (CSGO_GetPlayerXuid_t)relativeCallTarget(getPlayerXuidStringFromPlayerSlot + 0x2b);
+
+	return result;
 };
 
 bool getPanoramaAddrsFromClient(HMODULE clientDll) {
@@ -1466,7 +1482,7 @@ bool getPanoramaAddrs(HMODULE panoramaDll) {
 	}
 
 	{
-		g_CUIEngine_RunScript = (g_CUIEngine_RunScript_t)getAddress(panoramaDll, "48 89 5C 24 ?? 4C 89 4C 24 ?? 48 89 54 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D");
+		g_CUIEngine_RunScript = (g_CUIEngine_RunScript_t)getAddress(panoramaDll, "48 89 5C 24 ?? 4C 89 4C 24 ?? 4C 89 44 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D");
 		if (nullptr == g_CUIEngine_RunScript) {
 			ErrorBox(MkErrStr(__FILE__, __LINE__));
 			return false;
@@ -1601,17 +1617,17 @@ void HookPanorama(HMODULE panoramaDll)
 void HookDeathMsg(HMODULE clientDll) {
 	if (g_MirvDeathMsgGlobals.hooked) return;
 
-    getDeathMsgAddrs(clientDll);
+	if (!getDeathMsgAddrs(clientDll)) return;
 	if (!getPanoramaAddrsFromClient(clientDll)) return;
 
 	DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
 
-    DetourAttach(&(PVOID&)g_Original_handlePlayerDeath, handleDeathnotice);
-    DetourAttach(&(PVOID&)g_Original_getLocalSteamId, getLocalSteamId);
-	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlot, New_CSGOAvatarImage_PopulateFromPlayerSlot);
-	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative, New_CSGOAvatarImage_PopulateFromPlayerSlotNative);
-	DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromAvatarHandle, New_CSGOAvatarImage_PopulateFromAvatarHandle);
+	DetourAttach(&(PVOID&)g_Original_handlePlayerDeath, handleDeathnotice);
+	DetourAttach(&(PVOID&)g_Original_getLocalSteamId, getLocalSteamId);
+	if (g_Original_CSGOAvatarImage_PopulateFromPlayerSlot) DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlot, New_CSGOAvatarImage_PopulateFromPlayerSlot);
+	if (g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative) DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromPlayerSlotNative, New_CSGOAvatarImage_PopulateFromPlayerSlotNative);
+	if (g_Original_CSGOAvatarImage_PopulateFromAvatarHandle) DetourAttach(&(PVOID&)g_Original_CSGOAvatarImage_PopulateFromAvatarHandle, New_CSGOAvatarImage_PopulateFromAvatarHandle);
 
 	if(NO_ERROR != DetourTransactionCommit()) {
 		ErrorBox("Failed to detour DeathMsg functions.");
@@ -2075,8 +2091,8 @@ bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlot(void* This, int playe
 	const uint64_t replacementSteamId = getAvatarReplacementForPlayerSlot(playerSlot, playerKnown);
 	if (replacementSteamId) {
 		g_AvatarPanelReplacementByPanel[This] = replacementSteamId;
-		setAvatarImageFromSteamId(This, replacementSteamId);
-		return true;
+		if (setAvatarImageFromSteamId(This, replacementSteamId)) return true;
+		g_AvatarPanelReplacementByPanel.erase(This);
 	}
 
 	if (playerKnown) g_AvatarPanelReplacementByPanel.erase(This);
@@ -2089,8 +2105,8 @@ bool __fastcall New_CSGOAvatarImage_PopulateFromPlayerSlotNative(void* This, int
 	const uint64_t replacementSteamId = getAvatarReplacementForPlayerSlot(playerSlot, playerKnown);
 	if (replacementSteamId) {
 		g_AvatarPanelReplacementByPanel[This] = replacementSteamId;
-		setAvatarImageFromSteamId(This, replacementSteamId);
-		return true;
+		if (setAvatarImageFromSteamId(This, replacementSteamId)) return true;
+		g_AvatarPanelReplacementByPanel.erase(This);
 	}
 
 	if (playerKnown) g_AvatarPanelReplacementByPanel.erase(This);
