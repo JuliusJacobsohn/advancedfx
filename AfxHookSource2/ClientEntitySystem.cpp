@@ -15,6 +15,8 @@
 #include "AfxHookSource2Rs.h"
 #include "SchemaSystem.h"
 
+#include "../deps/release/prop/cs2/sdk_src/public/tier1/utlstring.h"
+
 #define WIN32_LEAN_AND_MEAN
 #include "../deps/release/Detours/src/detours.h"
 
@@ -176,7 +178,7 @@ SOURCESDK::CS2::CBaseHandle CEntityInstance::GetActiveWeaponHandle() {
 
 const char * CEntityInstance::GetPlayerName(){
     if (!IsPlayerController()) return nullptr;
-    return *(const char **)((u_char*)(this) + g_clientDllOffsets.CBasePlayerController.m_iszPlayerName);
+    return (const char*)((u_char*)this + g_clientDllOffsets.CBasePlayerController.m_iszPlayerName);
 }
 
 uint64_t CEntityInstance::GetSteamId(){
@@ -186,7 +188,7 @@ uint64_t CEntityInstance::GetSteamId(){
 
 const char * CEntityInstance::GetSanitizedPlayerName() {
    if (!IsPlayerController()) return nullptr;
-    return *(const char **)((u_char*)(this) + g_clientDllOffsets.CCSPlayerController.m_sSanitizedPlayerName);
+    return ((SOURCESDK::CS2::CUtlString*)((u_char*)this + g_clientDllOffsets.CCSPlayerController.m_sSanitizedPlayerName))->Get();
 
 }
 

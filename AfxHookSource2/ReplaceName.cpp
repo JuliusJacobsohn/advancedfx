@@ -78,6 +78,36 @@ const char * __fastcall New_CCSPlayerController_GetPlayerName(CEntityInstance * 
 typedef void (__fastcall * GetDecoratedPlayerName_t)(void* This, SOURCESDK::CS2::CBufferString * pBufferString, unsigned int flags, bool bUnk3);
 GetDecoratedPlayerName_t g_Org_GetDecoratedPlayerName = nullptr;
 
+bool DecoratedNameMatches(const char* decoratedName, const char* playerName) {
+    return decoratedName && playerName && 0 == _stricmp(decoratedName, playerName);
+}
+
+CEntityInstance* ResolveDecoratedPlayerController(void* This, const char* decoratedName) {
+    if (!g_pEntityList || !*g_pEntityList || !g_GetEntityFromIndex) return nullptr;
+
+    CEntityInstance* inferredController = nullptr;
+    if (This) {
+        auto vtable = *(void***)This;
+        if (vtable && vtable[-1]) {
+            const auto completeObjectLocator = (unsigned char*)vtable[-1];
+            const int32_t subobjectOffset = *(int32_t*)(completeObjectLocator + 0x4);
+            inferredController = (CEntityInstance*)((unsigned char*)This - subobjectOffset);
+        }
+    }
+
+    // Player controllers occupy the low entity slots. Resolve through the
+    // entity system so no methods are called on an inferred, unverified pointer.
+    for (int index = 0; index <= 64; ++index) {
+        auto entity = (CEntityInstance*)g_GetEntityFromIndex(*g_pEntityList, index);
+        if (!entity || !entity->IsPlayerController()) continue;
+        if (entity == inferredController) return entity;
+        if (DecoratedNameMatches(decoratedName, entity->GetPlayerName())) return entity;
+        if (DecoratedNameMatches(decoratedName, entity->GetSanitizedPlayerName())) return entity;
+    }
+
+    return nullptr;
+}
+
 void __fastcall New_GetDecoratedPlayerName(void* This, SOURCESDK::CS2::CBufferString * pBufferString, unsigned int flags, bool bUnk3) {
 
     // flags:
@@ -87,10 +117,8 @@ void __fastcall New_GetDecoratedPlayerName(void* This, SOURCESDK::CS2::CBufferSt
 
     g_Org_GetDecoratedPlayerName(This, pBufferString, flags, bUnk3);
 
-    void ** vtable = *(void ***)This;
-    unsigned char * class_thunk = (unsigned char *)(vtable[-1]);
-    int32_t vtable_offset = *(int32_t *)(class_thunk + 0x4);
-    if(auto pEntityInstance = (CEntityInstance *)((unsigned char *)This - vtable_offset)) {
+    const char* decoratedName = pBufferString ? pBufferString->Get() : nullptr;
+    if(auto pEntityInstance = ResolveDecoratedPlayerController(This, decoratedName)) {
         if(g_bDebug_GetDecoratedPlayerName) {
             auto handle = pEntityInstance->GetHandle();
             if (handle.IsValid()) advancedfx::Message("GetDecoratedPlayerName: userId=%i, flags=%u, bUnk3=%i -> name=%s\n", handle.GetEntryIndex()-1, flags, bUnk3?1:0, pBufferString->Get());
